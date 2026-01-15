@@ -1,0 +1,315 @@
+'use server';
+
+import { GoogleGenAI } from '@google/genai';
+import {
+  Scenario,
+  Message,
+  ProficiencyLevel,
+  GeminiResponse,
+  Evaluation,
+  ReplySuggestion,
+} from '@/types';
+
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+
+// Model to use - Gemini 3
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+// Helper to handle API calls with retry and fallback
+async function callGemini(options: {
+  contents: any[];
+  systemInstruction?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}): Promise<string> {
+  const { contents, systemInstruction, temperature = 0.7, maxOutputTokens = 200 } = options;
+
+  try {
+    const response = await genAI.models.generateContent({
+      model: MODEL,
+      contents,
+      config: {
+        systemInstruction,
+        temperature,
+        maxOutputTokens,
+      },
+    });
+    return response.text || '';
+  } catch (error: any) {
+    // If rate limited, wait and retry once
+    if (error?.status === 429) {
+      console.log('Rate limited, waiting 8 seconds...');
+      await new Promise((resolve) => setTimeout(resolve, 8000));
+      
+      try {
+        const response = await genAI.models.generateContent({
+          model: MODEL,
+          contents,
+          config: {
+            systemInstruction,
+            temperature,
+            maxOutputTokens,
+          },
+        });
+        return response.text || '';
+      } catch (retryError: any) {
+        console.error('Retry also failed:', retryError);
+        throw retryError;
+      }
+    }
+    throw error;
+  }
+}
+
+// System prompt for the conversational partner
+function buildPartnerSystemPrompt(
+  scenario: Scenario,
+  proficiencyLevel: ProficiencyLevel
+): string {
+  const levelInstructions = {
+    beginner: `
+- Speak slowly and clearly
+- Use mostly English with key Yoruba phrases
+- Accept single-word or short responses from the user
+- Keep your sentences short (under 15 words)
+- Be very encouraging and patient
+- If the user switches to full English, gently include a Yoruba word or phrase in your response`,
+    intermediate: `
+- Use a balanced mix of Yoruba and English (about 50/50)
+- Expect full sentences from the user
+- Introduce common idiomatic expressions
+- Keep natural conversation flow
+- Wait 2-3 turns before offering any help
+- Use code-switching naturally as Nigerians do`,
+    advanced: `
+- Speak primarily in Yoruba with minimal English
+- Use proverbs, idioms, and complex structures when appropriate
+- Challenge the user with unexpected turns in conversation
+- Rarely offer hints - let them work through difficulties
+- Speak at natural speed`,
+  };
+
+  return `You are playing a character in a Yoruba language learning exercise.
+
+CHARACTER: ${scenario.aiRole}
+SETTING: ${scenario.context}
+
+YOUR BEHAVIOR:
+${levelInstructions[proficiencyLevel]}
+
+CRITICAL RULES:
+1. NEVER correct the user's grammar or pronunciation during the conversation
+2. NEVER break character or mention that this is a learning exercise
+3. NEVER use formal lesson language like "let me teach you" or "the correct way is"
+4. DO respond naturally to what the user MEANS, even if their grammar is imperfect
+5. DO stay in character fully - react as your character would
+6. DO keep responses concise (1-3 sentences typically)
+7. If the user seems stuck for a long time, you may gently prompt them with a question
+
+LANGUAGE: Respond naturally mixing Yoruba and English as a Nigerian would.
+
+Remember: This is a CONVERSATION, not a lesson. Be natural, be the character.`;
+}
+
+// System prompt for silent evaluation
+function buildEvaluatorSystemPrompt(): string {
+  return `You are a silent evaluator for a Yoruba language learning conversation.
+
+Your job is to analyze the USER's responses ONLY (not the AI partner's).
+
+After analyzing, return a JSON object with this structure:
+{
+  "strength": "One specific thing the user did well (be concrete, cite their words)",
+  "strengthExample": "The exact phrase they used that was good",
+  "improvement": "One specific area they could improve (be encouraging)",
+  "correctedSentence": "A better way they could have said something, with translation",
+  "overallScore": 7,
+  "fluencyScore": 6,
+  "grammarScore": 7,
+  "confidenceScore": 8
+}
+
+Scoring guide (1-10):
+- 1-3: Struggling, many errors, broken communication
+- 4-6: Communicating but with notable room for improvement
+- 7-8: Good, natural, minor improvements possible
+- 9-10: Excellent, native-like
+
+Be specific in strengths/improvements - never be generic like "good job" or "keep practicing".
+Reference actual words and phrases the user said.`;
+}
+
+export async function getPartnerResponse(
+  scenario: Scenario,
+  proficiencyLevel: ProficiencyLevel,
+  conversationHistory: Message[],
+  userMessage: string
+): Promise<GeminiResponse> {
+  const systemPrompt = buildPartnerSystemPrompt(scenario, proficiencyLevel);
+
+  // Build conversation context
+  const messages = conversationHistory.map((m) => ({
+    role: m.role === 'ai' ? 'model' : 'user',
+    parts: [{ text: m.content }],
+  }));
+
+  // Add the new user message
+  messages.push({
+    role: 'user',
+    parts: [{ text: userMessage }],
+  });
+
+  const reply = await callGemini({
+    contents: messages,
+    systemInstruction: systemPrompt,
+    temperature: 0.9,
+    maxOutputTokens: 200,
+  });
+
+  // Get translation for the response (skip if reply is mostly English)
+  let translation = reply;
+  try {
+    translation = await callGemini({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `Translate this to English. Only output the translation, nothing else: "${reply}"`,
+            },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      maxOutputTokens: 200,
+    });
+  } catch {
+    // If translation fails, just use the reply
+    translation = reply;
+  }
+
+  return {
+    reply,
+    translation: translation || reply,
+  };
+}
+
+export async function getReplySuggestions(
+  scenario: Scenario,
+  proficiencyLevel: ProficiencyLevel,
+  conversationHistory: Message[],
+  lastAiMessage: string
+): Promise<ReplySuggestion[]> {
+  const levelHint =
+    proficiencyLevel === 'beginner'
+      ? 'simple, mostly English with a Yoruba word'
+      : proficiencyLevel === 'intermediate'
+        ? 'mixed Yoruba-English'
+        : 'primarily Yoruba';
+
+  try {
+    const text = await callGemini({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `The user is in a Yoruba conversation practice. The AI partner just said: "${lastAiMessage}"
+
+Provide 2 possible responses the user could say. Make them ${levelHint}.
+
+Return as JSON array:
+[
+  {"text": "response in Yoruba/English mix", "translation": "English translation"},
+  {"text": "another response", "translation": "English translation"}
+]
+
+Only output the JSON, nothing else.`,
+            },
+          ],
+        },
+      ],
+      temperature: 0.8,
+      maxOutputTokens: 300,
+    });
+
+    const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch {
+    // Return static fallback suggestions
+    return [
+      { text: 'Ẹ ṣe o', translation: 'Thank you' },
+      { text: 'Báwo ni?', translation: 'How is it?' },
+    ];
+  }
+}
+
+export async function evaluateConversation(
+  scenario: Scenario,
+  messages: Message[]
+): Promise<Evaluation> {
+  const systemPrompt = buildEvaluatorSystemPrompt();
+
+  const conversationText = messages
+    .map(
+      (m) =>
+        `${m.role === 'user' ? 'LEARNER' : 'AI PARTNER'}: ${m.content}`
+    )
+    .join('\n');
+
+  try {
+    const text = await callGemini({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `Evaluate this conversation:\n\n${conversationText}`,
+            },
+          ],
+        },
+      ],
+      systemInstruction: systemPrompt,
+      temperature: 0.3,
+      maxOutputTokens: 500,
+    });
+
+    const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleaned);
+  } catch {
+    return {
+      strength: 'You engaged in the conversation',
+      improvement: 'Try to use more Yoruba expressions',
+      correctedSentence: 'Keep practicing!',
+      overallScore: 5,
+      fluencyScore: 5,
+      grammarScore: 5,
+      confidenceScore: 5,
+    };
+  }
+}
+
+export async function translateText(
+  text: string,
+  targetLanguage: 'english' | 'yoruba'
+): Promise<string> {
+  try {
+    const result = await callGemini({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `Translate this to ${targetLanguage}. Only output the translation: "${text}"`,
+            },
+          ],
+        },
+      ],
+      temperature: 0.1,
+      maxOutputTokens: 200,
+    });
+    return result || text;
+  } catch {
+    return text;
+  }
+}
