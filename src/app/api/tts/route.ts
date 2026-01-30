@@ -2,51 +2,39 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, gender } = await request.json();
+    const { text } = await request.json();
 
     if (!text) {
       return NextResponse.json({ error: 'Text is required' }, { status: 400 });
     }
 
-    const apiKey = process.env.ELEVENLABS_API_KEY;
-    if (!apiKey) {
+    const modalUrl = process.env.MODAL_TTS_URL;
+    if (!modalUrl) {
+      console.error('MODAL_TTS_URL is not set');
+      // Graceful fallback to avoid crashing if user hasn't deployed yet
       return NextResponse.json(
-        { error: 'ELEVENLABS_API_KEY is not set' },
-        { status: 500 }
+        { error: 'TTS service not configured' },
+        { status: 503 }
       );
     }
 
-    // Determine voice ID based on gender
-    let voiceId = process.env.ELEVENLABS_VOICE_ID || 'pNInz6obpgDQGcFmaJgB'; // Default (Adam)
+    // Call the Modal endpoint
+    // Ensure URL ends with /generate if not present (simple heuristic)
+    const endpoint = modalUrl.endsWith('/generate') 
+      ? modalUrl 
+      : `${modalUrl.replace(/\/$/, '')}/generate`;
 
-    if (gender === 'male' && process.env.ELEVENLABS_VOICE_ID_MALE) {
-      voiceId = process.env.ELEVENLABS_VOICE_ID_MALE;
-    } else if (gender === 'female' && process.env.ELEVENLABS_VOICE_ID_FEMALE) {
-      voiceId = process.env.ELEVENLABS_VOICE_ID_FEMALE;
-    }
-
-    const response = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'xi-api-key': apiKey,
-        },
-        body: JSON.stringify({
-          text,
-          model_id: 'eleven_turbo_v2_5', // Faster, low latency model
-          voice_settings: {
-            stability: 0.5,
-            similarity_boost: 0.75,
-          },
-        }),
-      }
-    );
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
+    });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('ElevenLabs API error:', errorText);
+      console.error('Modal TTS API error:', errorText);
       return NextResponse.json(
         { error: 'Failed to generate speech' },
         { status: response.status }
@@ -55,10 +43,10 @@ export async function POST(request: NextRequest) {
 
     const audioBuffer = await response.arrayBuffer();
     
-    // Return audio as a stream/blob
+    // Return audio as WAV
     return new NextResponse(audioBuffer, {
       headers: {
-        'Content-Type': 'audio/mpeg',
+        'Content-Type': 'audio/wav',
         'Content-Length': audioBuffer.byteLength.toString(),
       },
     });
