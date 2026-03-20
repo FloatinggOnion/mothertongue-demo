@@ -7,7 +7,7 @@
 
 ### Infrastructure
 
-- [ ] **INFRA-01**: Gemini evaluation failure surfaces an explicit error rather than silently returning default scores (all-5s fallback removed)
+- [x] **INFRA-01**: Gemini evaluation failure surfaces an explicit error rather than silently returning default scores (all-5s fallback removed)
 - [x] **INFRA-02**: Gemini API calls retry with exponential backoff (2-4s, 8-16s, 32-64s) before failing with a user-visible error message
 - [x] **INFRA-03**: All message IDs use `crypto.randomUUID()` instead of `Date.now()` to prevent collisions
 - [x] **INFRA-04**: All API route request bodies are validated with Zod before processing
@@ -104,7 +104,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| INFRA-01 | Phase 1 | Pending |
+| INFRA-01 | Phase 1 | Complete |
 | INFRA-02 | Phase 1 | Complete |
 | INFRA-03 | Phase 1 | Complete |
 | INFRA-04 | Phase 1 | Complete |
