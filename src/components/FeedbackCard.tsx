@@ -2,19 +2,34 @@
 
 import { Evaluation, ConversationMetrics } from '@/types';
 
-interface FeedbackCardProps {
-  evaluation: Evaluation;
-  metrics: ConversationMetrics;
-  onClose: () => void;
-  onTryAgain: () => void;
+type FeedbackCardProps =
+  | {
+      state: 'success';
+      evaluation: Evaluation;
+      metrics: ConversationMetrics;
+      onClose: () => void;
+      onTryAgain: () => void;
+    }
+  | {
+      state: 'error';
+      errorMessage: string;
+      onRetry: () => void;
+      onClose: () => void;
+    };
+
+export function FeedbackCard(props: FeedbackCardProps) {
+  if (props.state === 'error') {
+    return <ErrorState {...props} />;
+  }
+  return <SuccessState {...props} />;
 }
 
-export function FeedbackCard({
+function SuccessState({
   evaluation,
   metrics,
   onClose,
   onTryAgain,
-}: FeedbackCardProps) {
+}: Extract<FeedbackCardProps, { state: 'success' }>) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -126,6 +141,50 @@ export function FeedbackCard({
             className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white font-medium transition-colors"
           >
             Try Again
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorState({
+  errorMessage,
+  onRetry,
+  onClose,
+}: Extract<FeedbackCardProps, { state: 'error' }>) {
+  return (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl max-w-lg w-full p-6 md:p-8 border border-white/10 shadow-2xl">
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="text-4xl mb-2">⚠️</div>
+          <h2 className="text-2xl font-bold text-white mb-1">Couldn&apos;t get your feedback</h2>
+        </div>
+
+        {/* Error Panel */}
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 mb-6">
+          <div className="text-amber-400 font-medium text-sm mb-2">
+            Something went wrong
+          </div>
+          <p className="text-white text-sm">
+            Your practice session was great — tap below to try getting feedback again.
+          </p>
+        </div>
+
+        {/* Actions */}
+        <div className="flex gap-3">
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors"
+          >
+            Back to Scenarios
+          </button>
+          <button
+            onClick={onRetry}
+            className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-medium transition-colors"
+          >
+            Retry evaluation
           </button>
         </div>
       </div>
