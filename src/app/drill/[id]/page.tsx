@@ -60,7 +60,7 @@ export default function DrillPage() {
   useEffect(() => {
     if (scenario && messages.length === 0) {
       const initialMessage: Message = {
-        id: 'initial',
+        id: crypto.randomUUID(),
         role: 'ai',
         content: scenario.starterPrompt,
         timestamp: Date.now(),
