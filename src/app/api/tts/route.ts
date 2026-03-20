@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
+import { TtsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
 // Map gender to Google Cloud TTS Nigerian voices
 const VOICE_MAPPING = {
@@ -17,25 +18,31 @@ const client = new TextToSpeechClient({
 
 export async function POST(request: NextRequest) {
   try {
-    const { text, gender } = await request.json();
+    const body = await request.json();
 
-    if (!text) {
-      return NextResponse.json({ error: 'Text is required' }, { status: 400 });
+    const validationResult = TtsSchema.safeParse(body);
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: getZodErrorMessage(validationResult.error) },
+        { status: 400 }
+      );
     }
 
+    const { text, gender } = validationResult.data;
+
     // Default to female (en-NG-Wavenet-A) if gender not specified
-    const voiceName = (gender === 'male' || gender === 'female') 
-      ? VOICE_MAPPING[gender] 
+    const voiceName = (gender === 'male' || gender === 'female')
+      ? VOICE_MAPPING[gender]
       : VOICE_MAPPING.female;
 
     const [response] = await client.synthesizeSpeech({
       input: { text },
-      voice: { 
-        languageCode: 'en-NG', 
+      voice: {
+        languageCode: 'en-NG',
         name: voiceName,
-        ssmlGender: gender === 'male' ? 'MALE' : 'FEMALE' 
+        ssmlGender: gender === 'male' ? 'MALE' : 'FEMALE'
       },
-      audioConfig: { 
+      audioConfig: {
         audioEncoding: 'MP3',
         speakingRate: 1.0,
         pitch: 0.0,
@@ -61,7 +68,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: any) {
     console.error('Google TTS API error:', error);
-    
+
     // Check for obvious auth issues
     if (error.message?.includes('credentials')) {
       return NextResponse.json(
