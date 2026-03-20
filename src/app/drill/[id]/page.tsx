@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getScenarioById } from '@/config/scenarios';
 import {
   ConversationView,
+  EvaluationLoading,
   MicButton,
   ReplySuggestions,
   FeedbackCard,
@@ -27,6 +28,7 @@ export default function DrillPage() {
   // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [proficiencyLevel] = useState<ProficiencyLevel>('beginner');
   const [speakingStartTime, setSpeakingStartTime] = useState<number | null>(null);
   const [totalSpeakingTime, setTotalSpeakingTime] = useState(0);
@@ -215,7 +217,7 @@ export default function DrillPage() {
 
   const handleEndDrill = async () => {
     setDrillEnded(true);
-    setIsLoading(true);
+    setIsEvaluating(true);
 
     try {
       const response = await fetch('/api/evaluate', {
@@ -232,8 +234,9 @@ export default function DrillPage() {
       setShowFeedback(true);
     } catch (error) {
       console.error('Failed to evaluate:', error);
+      setShowFeedback(true);
     } finally {
-      setIsLoading(false);
+      setIsEvaluating(false);
     }
   };
 
@@ -408,7 +411,10 @@ export default function DrillPage() {
         </div>
       </div>
 
-      {/* Feedback Modal */}
+      {/* Evaluation loading indicator — shown while /api/evaluate request is in flight */}
+      <EvaluationLoading isVisible={isEvaluating} />
+
+      {/* Feedback Modal — shown when evaluation completes */}
       {showFeedback && evaluation && (
         <FeedbackCard
           evaluation={evaluation}
