@@ -131,7 +131,7 @@ export default function DrillPage() {
     setShowSuggestions(false);
 
     const userMessage: Message = {
-      id: `user-${Date.now()}`,
+      id: crypto.randomUUID(),
       role: 'user',
       content: userText.trim(),
       timestamp: Date.now(),
