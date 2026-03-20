@@ -155,7 +155,7 @@ export default function DrillPage() {
 
       if (data.reply) {
         const aiMessage: Message = {
-          id: `ai-${Date.now()}`,
+          id: crypto.randomUUID(),
           role: 'ai',
           content: data.reply,
           translation: data.translation,
