@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenAI } from '@google/genai';
-
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash'; // High performance model for audio
+import { callGemini } from '@/services/gemini';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,14 +14,13 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await audioFile.arrayBuffer();
     const base64Audio = Buffer.from(arrayBuffer).toString('base64');
 
-    const result = await genAI.models.generateContent({
-      model: MODEL,
+    const transcription = await callGemini({
       contents: [
         {
           role: 'user',
           parts: [
             {
-              text: 'Transcribe this audio exactly as spoken. If there are Yoruba words, transcribe them correctly. Only output the transcription, no valid preamble.',
+              text: 'Transcribe this audio exactly as spoken. If there are Yoruba words, transcribe them correctly. Only output the transcription, no extra preamble.',
             },
             {
               inlineData: {
@@ -35,14 +31,10 @@ export async function POST(request: NextRequest) {
           ],
         },
       ],
-      config: {
-        temperature: 0.0,
-        maxOutputTokens: 500,
-      },
+      temperature: 0.0,
+      maxOutputTokens: 500,
     });
 
-    const transcription = result.text || '';
-    
     return NextResponse.json({ transcription });
   } catch (error) {
     console.error('Transcription API error:', error);
