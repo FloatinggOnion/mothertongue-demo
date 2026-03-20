@@ -40,6 +40,9 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# error logs (may contain sensitive data)
+/logs/
+
 # JSON
 *.json
 !.planning/*.json
