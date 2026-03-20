@@ -1,22 +1,26 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getReplySuggestions } from '@/services/gemini';
 import { getScenarioById } from '@/config/scenarios';
-import { Message, ProficiencyLevel } from '@/types';
+import { SuggestionsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    const validationResult = SuggestionsSchema.safeParse(body);
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: getZodErrorMessage(validationResult.error) },
+        { status: 400 }
+      );
+    }
+
     const {
       scenarioId,
       proficiencyLevel,
       conversationHistory,
       lastAiMessage,
-    }: {
-      scenarioId: string;
-      proficiencyLevel: ProficiencyLevel;
-      conversationHistory: Message[];
-      lastAiMessage: string;
-    } = body;
+    } = validationResult.data;
 
     const scenario = getScenarioById(scenarioId);
     if (!scenario) {
