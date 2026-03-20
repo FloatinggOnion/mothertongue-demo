@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-stopped_at: Completed 01-gemini-stabilization/01-01-PLAN.md
-last_updated: "2026-03-20T21:54:54.379Z"
+stopped_at: Completed 01-gemini-stabilization/01-05-PLAN.md
+last_updated: "2026-03-20T22:17:08.149Z"
 progress:
   total_phases: 6
   completed_phases: 0
   total_plans: 6
-  completed_plans: 1
+  completed_plans: 3
 ---
 
 # Project State
@@ -47,6 +47,8 @@ Plan: 1 of 6
 
 *Updated after each plan completion*
 | Phase 01-gemini-stabilization P01 | 41 | 4 tasks | 4 files |
+| Phase 01 P04 | 5 | 4 tasks | 1 files |
+| Phase 01-gemini-stabilization P05 | 15 | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -61,6 +63,9 @@ Recent decisions affecting current work:
 - [Roadmap]: UX polish consolidated into Phase 6 — woven throughout but formally delivered last after core product loop is validated
 - [Phase 01-gemini-stabilization]: Used node environment in vitest (not jsdom) — all tests target server-side service code
 - [Phase 01-gemini-stabilization]: Test names embed requirement IDs (INFRA-01, INFRA-02) to enable traceability from failing tests back to requirements
+- [Phase 01]: crypto.randomUUID() used without import — globally available in Node 22 / Next.js 16; role prefixes removed from IDs as redundant
+- [Phase 01-gemini-stabilization]: Centralized all Zod schemas in src/lib/zod-schemas.ts rather than inline — single import source for all routes
+- [Phase 01-gemini-stabilization]: getZodErrorMessage() helper extracts first issue as 'field message' format — matches user decision for field-level error detail in 400 responses
 
 ### Pending Todos
 
@@ -75,6 +80,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-20T21:54:54.366Z
-Stopped at: Completed 01-gemini-stabilization/01-01-PLAN.md
+Last session: 2026-03-20T22:17:08.132Z
+Stopped at: Completed 01-gemini-stabilization/01-05-PLAN.md
 Resume file: None
