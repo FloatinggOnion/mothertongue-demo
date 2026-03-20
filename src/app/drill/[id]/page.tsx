@@ -35,6 +35,7 @@ export default function DrillPage() {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<ReplySuggestion[]>([]);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [drillEnded, setDrillEnded] = useState(false);
   const [textInput, setTextInput] = useState('');
@@ -215,29 +216,42 @@ export default function DrillPage() {
     await sendMessage(text);
   };
 
-  const handleEndDrill = async () => {
-    setDrillEnded(true);
-    setIsEvaluating(true);
+  const fetchEvaluation = async () => {
+    if (!scenario || messages.length === 0) return;
 
     try {
+      setEvaluationError(null);
+      setEvaluation(null);
+      setIsEvaluating(true);
+
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scenarioId: scenario?.id,
-          messages,
+          scenarioId: scenario.id,
+          messages: messages.filter((m) => m.id !== 'initial'),
         }),
       });
+
+      if (!response.ok) {
+        throw new Error(`Evaluation failed with status ${response.status}`);
+      }
 
       const data = await response.json();
       setEvaluation(data);
       setShowFeedback(true);
     } catch (error) {
-      console.error('Failed to evaluate:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to evaluate conversation';
+      setEvaluationError(errorMessage);
       setShowFeedback(true);
     } finally {
       setIsEvaluating(false);
     }
+  };
+
+  const handleEndDrill = async () => {
+    setDrillEnded(true);
+    await fetchEvaluation();
   };
 
   const metrics: ConversationMetrics = {
@@ -414,19 +428,30 @@ export default function DrillPage() {
       {/* Evaluation loading indicator — shown while /api/evaluate request is in flight */}
       <EvaluationLoading isVisible={isEvaluating} />
 
-      {/* Feedback Modal — shown when evaluation completes */}
-      {showFeedback && evaluation && (
+      {/* Feedback Modal — shown when evaluation completes or errors */}
+      {showFeedback && (
         <FeedbackCard
-          evaluation={evaluation}
-          metrics={metrics}
-          onClose={() => router.push('/')}
-          onTryAgain={() => {
-            setMessages([]);
-            setEvaluation(null);
-            setShowFeedback(false);
-            setDrillEnded(false);
-            setTotalSpeakingTime(0);
-          }}
+          {...(evaluationError
+            ? {
+                state: 'error' as const,
+                errorMessage: evaluationError,
+                onRetry: fetchEvaluation,
+                onClose: () => router.push('/'),
+              }
+            : {
+                state: 'success' as const,
+                evaluation: evaluation!,
+                metrics: metrics,
+                onClose: () => router.push('/'),
+                onTryAgain: () => {
+                  setMessages([]);
+                  setEvaluation(null);
+                  setEvaluationError(null);
+                  setShowFeedback(false);
+                  setDrillEnded(false);
+                  setTotalSpeakingTime(0);
+                },
+              })}
         />
       )}
     </div>
