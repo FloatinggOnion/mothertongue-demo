@@ -9,14 +9,31 @@ import {
   Evaluation,
   ReplySuggestion,
 } from '@/types';
+import { logError } from '@/lib/logger';
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
 // Model to use - Gemini 3
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
-// Helper to handle API calls with retry and fallback
-async function callGemini(options: {
+// Backoff windows per REQUIREMENTS.md (attempt N uses index N-1)
+const RETRY_WINDOWS_MS: [number, number][] = [
+  [2000, 4000], // Attempt 1 retry: 2–4 seconds
+  [8000, 16000], // Attempt 2 retry: 8–16 seconds
+  [32000, 64000], // Attempt 3 retry: 32–64 seconds (not used — throw after 3 attempts)
+];
+
+function isRetryable(error: any): boolean {
+  const status = error?.status ?? error?.statusCode ?? error?.code;
+  return status === 429 || status === 503 || status === 502;
+}
+
+function jitteredDelay([min, max]: [number, number]): number {
+  return min + Math.random() * (max - min);
+}
+
+// Helper to handle API calls with exponential backoff retry
+export async function callGemini(options: {
   contents: any[];
   systemInstruction?: string;
   temperature?: number;
@@ -24,41 +41,42 @@ async function callGemini(options: {
 }): Promise<string> {
   const { contents, systemInstruction, temperature = 0.7, maxOutputTokens = 200 } = options;
 
-  try {
-    const response = await genAI.models.generateContent({
-      model: MODEL,
-      contents,
-      config: {
-        systemInstruction,
-        temperature,
-        maxOutputTokens,
-      },
-    });
-    return response.text || '';
-  } catch (error: any) {
-    // If rate limited, wait and retry once
-    if (error?.status === 429) {
-      console.log('Rate limited, waiting 8 seconds...');
-      await new Promise((resolve) => setTimeout(resolve, 8000));
-      
-      try {
-        const response = await genAI.models.generateContent({
-          model: MODEL,
-          contents,
-          config: {
-            systemInstruction,
-            temperature,
-            maxOutputTokens,
-          },
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await genAI.models.generateContent({
+        model: MODEL,
+        contents,
+        config: {
+          systemInstruction,
+          temperature,
+          maxOutputTokens,
+        },
+      });
+      return response.text || '';
+    } catch (error: any) {
+      lastError = error;
+
+      // If not retryable or this was the last attempt, log and throw
+      if (!isRetryable(error) || attempt === 2) {
+        logError('/api/gemini-call', error, {
+          attempt: attempt + 1,
+          isRetryable: isRetryable(error),
+          status: error?.status ?? error?.statusCode,
         });
-        return response.text || '';
-      } catch (retryError: any) {
-        console.error('Retry also failed:', retryError);
-        throw retryError;
+        throw error;
       }
+
+      // Retryable error — wait with jittered backoff before next attempt
+      const delayRange = RETRY_WINDOWS_MS[attempt];
+      const delay = jitteredDelay(delayRange);
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
-    throw error;
   }
+
+  // Should never reach here, but throw lastError as fallback
+  throw lastError;
 }
 
 // System prompt for the conversational partner
@@ -257,36 +275,24 @@ export async function evaluateConversation(
     )
     .join('\n');
 
-  try {
-    const text = await callGemini({
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: `Evaluate this conversation:\n\n${conversationText}`,
-            },
-          ],
-        },
-      ],
-      systemInstruction: systemPrompt,
-      temperature: 0.3,
-      maxOutputTokens: 500,
-    });
+  const text = await callGemini({
+    contents: [
+      {
+        role: 'user',
+        parts: [
+          {
+            text: `Evaluate this conversation:\n\n${conversationText}`,
+          },
+        ],
+      },
+    ],
+    systemInstruction: systemPrompt,
+    temperature: 0.3,
+    maxOutputTokens: 500,
+  });
 
-    const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
-    return JSON.parse(cleaned);
-  } catch {
-    return {
-      strength: 'You engaged in the conversation',
-      improvement: 'Try to use more Yoruba expressions',
-      correctedSentence: 'Keep practicing!',
-      overallScore: 5,
-      fluencyScore: 5,
-      grammarScore: 5,
-      confidenceScore: 5,
-    };
-  }
+  const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
+  return JSON.parse(cleaned);
 }
 
 export async function translateText(
