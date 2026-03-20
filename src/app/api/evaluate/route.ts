@@ -1,18 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { evaluateConversation } from '@/services/gemini';
 import { getScenarioById } from '@/config/scenarios';
-import { Message } from '@/types';
+import { EvaluateSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // Validate request body with Zod
+    const validationResult = EvaluateSchema.safeParse(body);
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: getZodErrorMessage(validationResult.error) },
+        { status: 400 }
+      );
+    }
+
     const {
       scenarioId,
       messages,
-    }: {
-      scenarioId: string;
-      messages: Message[];
-    } = body;
+    } = validationResult.data;
 
     const scenario = getScenarioById(scenarioId);
     if (!scenario) {
