@@ -4,10 +4,10 @@ import { callGemini } from '@/services/gemini';
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const audioFile = formData.get('audio') as Blob;
+    const audioFile = formData.get('audio') as Blob | null;
 
     if (!audioFile) {
-      return NextResponse.json({ error: 'Audio file is required' }, { status: 400 });
+      return NextResponse.json({ error: 'audio is required' }, { status: 400 });
     }
 
     // Convert blob to base64
