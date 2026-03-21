@@ -222,6 +222,7 @@ export default function DrillPage() {
     try {
       setEvaluationError(null);
       setEvaluation(null);
+      setShowFeedback(false);
       setIsEvaluating(true);
 
       const response = await fetch('/api/evaluate', {
