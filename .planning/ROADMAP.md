@@ -12,7 +12,7 @@ The build path starts with foundation: stabilize the existing Gemini service bef
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Gemini Stabilization** ← plans created - Harden the Gemini service before adaptive logic compounds its failures
+- [x] **Phase 1: Gemini Stabilization** ← plans created - Harden the Gemini service before adaptive logic compounds its failures (completed 2026-03-21)
 - [ ] **Phase 2: Auth + Persistence** - User identity and session storage as one inseparable unit
 - [ ] **Phase 3: Language Architecture + TTS** - Multi-language parameterization and tone-accurate TTS before any feature work touches the language layer
 - [ ] **Phase 4: Adaptive Difficulty** - Close the adaptive learning loop using the stable, persisted foundation
@@ -122,7 +122,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Gemini Stabilization | 5/6 | In Progress|  |
+| 1. Gemini Stabilization | 5/6 | Complete    | 2026-03-21 |
 | 2. Auth + Persistence | 0/? | Not started | - |
 | 3. Language Architecture + TTS | 0/? | Not started | - |
 | 4. Adaptive Difficulty | 0/? | Not started | - |
