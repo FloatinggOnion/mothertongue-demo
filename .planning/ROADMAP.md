@@ -30,12 +30,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. When a Gemini API call returns a 429 or transient error, the app retries with exponential backoff and only shows the user an error message after all retries are exhausted
   3. Every message in a conversation has a unique ID that cannot collide with another message in the same session
   4. API routes reject malformed request bodies with a clear error before any processing occurs
-**Plans**: 5 plans in 1 wave + 1 setup wave
-- [ ] 01-01-PLAN.md — Wave 0: Test infrastructure (vitest, Zod install, gemini.test.ts scaffold)
-- [ ] 01-02-PLAN.md — Wave 1: callGemini() exponential backoff + /transcribe refactor (INFRA-02)
-- [ ] 01-03-PLAN.md — Wave 1: evaluateConversation() error propagation + FeedbackCard error state (INFRA-01)
-- [ ] 01-04-PLAN.md — Wave 1: Message ID UUIDs instead of Date.now() (INFRA-03)
-- [ ] 01-05-PLAN.md — Wave 1: API route Zod validation (INFRA-04)
+**Plans**: 6 plans completed
 
 ### Phase 2: Auth + Persistence
 **Goal**: Users have persistent identities and their session data is saved to a database from the first session — no orphaned data
@@ -47,12 +42,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A user can log out from any page and their session is terminated
   4. A user can log in on a different device and see the same history and progress level
   5. At the end of a session, a summary (scenario, level, turn count, scores, date) is saved and the user can view their past sessions
-**Plans**: 5 plans in 1 wave + 1 setup wave
-- [ ] 01-01-PLAN.md — Wave 0: Test infrastructure (vitest, Zod install, gemini.test.ts scaffold)
-- [ ] 01-02-PLAN.md — Wave 1: callGemini() exponential backoff + /transcribe refactor (INFRA-02)
-- [ ] 01-03-PLAN.md — Wave 1: evaluateConversation() error propagation + FeedbackCard error state (INFRA-01)
-- [ ] 01-04-PLAN.md — Wave 1: Message ID UUIDs instead of Date.now() (INFRA-03)
-- [ ] 01-05-PLAN.md — Wave 1: API route Zod validation (INFRA-04)
+**Plans**: 5 plans in 2 waves
+- [x] 02-01-PLAN.md — Wave 0: Database setup, Better Auth config, Drizzle schema, test scaffolds
+- [x] 02-02-PLAN.md — Wave 1: Better Auth route handler, route protection proxy, AUTH-01/02/03 tests
+- [x] 02-03-PLAN.md — Wave 1: Login/signup pages and forms, Navigation component, session-aware UI
+- [x] 02-04-PLAN.md — Wave 2: Session persistence in /api/evaluate, restore proficiency level on drill start, PERS-01/02 tests
+- [x] 02-05-PLAN.md — Wave 2: History page with session cards, PERS-03
 
 ### Phase 3: Language Architecture + TTS
 **Goal**: Language is a first-class runtime parameter throughout the codebase, TTS produces tone-accurate Yoruba speech, and adding a new language requires only a config entry
@@ -64,12 +59,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. TTS speech for Yoruba is audibly tone-accurate — high/mid/low tones are correctly rendered and the English-accented `en-NG` voice is no longer used for Yoruba instruction
   4. TTS audio is returned within 3 seconds for a typical utterance under normal network conditions
   5. TTS runs as a serverless endpoint outside the Next.js app bundle
-**Plans**: 5 plans in 1 wave + 1 setup wave
-- [ ] 01-01-PLAN.md — Wave 0: Test infrastructure (vitest, Zod install, gemini.test.ts scaffold)
-- [ ] 01-02-PLAN.md — Wave 1: callGemini() exponential backoff + /transcribe refactor (INFRA-02)
-- [ ] 01-03-PLAN.md — Wave 1: evaluateConversation() error propagation + FeedbackCard error state (INFRA-01)
-- [ ] 01-04-PLAN.md — Wave 1: Message ID UUIDs instead of Date.now() (INFRA-03)
-- [ ] 01-05-PLAN.md — Wave 1: API route Zod validation (INFRA-04)
+**Plans**: TBD
 
 ### Phase 4: Adaptive Difficulty
 **Goal**: The app infers each learner's proficiency level from their actual responses, persists that level, and uses it to calibrate the AI partner's language on the next turn and in future sessions
@@ -80,12 +70,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. A user who struggles does not experience immediate level drops — the system requires consistent evidence of struggle across multiple assessments before adjusting
   3. When the learner's level changes mid-session, a subtle in-conversation message acknowledges it ("Taking it up a notch" / "Let's ease back in")
   4. The inferred proficiency level from one session is restored at the start of the next session, not reset to beginner
-**Plans**: 5 plans in 1 wave + 1 setup wave
-- [ ] 01-01-PLAN.md — Wave 0: Test infrastructure (vitest, Zod install, gemini.test.ts scaffold)
-- [ ] 01-02-PLAN.md — Wave 1: callGemini() exponential backoff + /transcribe refactor (INFRA-02)
-- [ ] 01-03-PLAN.md — Wave 1: evaluateConversation() error propagation + FeedbackCard error state (INFRA-01)
-- [ ] 01-04-PLAN.md — Wave 1: Message ID UUIDs instead of Date.now() (INFRA-03)
-- [ ] 01-05-PLAN.md — Wave 1: API route Zod validation (INFRA-04)
+**Plans**: TBD
 
 ### Phase 5: Freeform Chat + Progress
 **Goal**: Learners can have open-ended conversations outside of structured scenarios, and can see their trajectory — current level, session count, and performance over time
@@ -97,12 +82,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. AI-generated Yoruba that lacks tone diacritics is rejected and regenerated before being shown to the learner
   4. The home page shows the user's current inferred level, session count, and streak
   5. The user can view a chart or timeline of their level history and a breakdown of scenarios attempted with their best scores
-**Plans**: 5 plans in 1 wave + 1 setup wave
-- [ ] 01-01-PLAN.md — Wave 0: Test infrastructure (vitest, Zod install, gemini.test.ts scaffold)
-- [ ] 01-02-PLAN.md — Wave 1: callGemini() exponential backoff + /transcribe refactor (INFRA-02)
-- [ ] 01-03-PLAN.md — Wave 1: evaluateConversation() error propagation + FeedbackCard error state (INFRA-01)
-- [ ] 01-04-PLAN.md — Wave 1: Message ID UUIDs instead of Date.now() (INFRA-03)
-- [ ] 01-05-PLAN.md — Wave 1: API route Zod validation (INFRA-04)
+**Plans**: TBD
 
 ### Phase 6: Learning UX Polish
 **Goal**: Every screen feels warm and conversational, mobile users have a first-class experience, and error states are reassuring rather than technical
@@ -122,8 +102,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Gemini Stabilization | 5/6 | Complete    | 2026-03-21 |
-| 2. Auth + Persistence | 0/? | Not started | - |
+| 1. Gemini Stabilization | 6/6 | Complete    | 2026-03-21 |
+| 2. Auth + Persistence | 5/5 | Plans created | 2026-03-21 |
 | 3. Language Architecture + TTS | 0/? | Not started | - |
 | 4. Adaptive Difficulty | 0/? | Not started | - |
 | 5. Freeform Chat + Progress | 0/? | Not started | - |
