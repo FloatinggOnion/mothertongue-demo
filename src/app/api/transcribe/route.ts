@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SpeechClient } from '@google-cloud/speech';
+import { SpeechClient, protos } from '@google-cloud/speech';
+
+type SpeechResult = protos.google.cloud.speech.v2.SpeechRecognitionResult;
 
 // Initialize Speech-to-Text v2 client with credentials
 const speechClient = new SpeechClient({
@@ -45,8 +47,8 @@ export async function POST(request: NextRequest) {
     });
 
     // Extract transcript from response
-    const transcript = response[0]?.results
-      ?.map((result: any) => result.alternatives?.[0]?.transcript || '')
+    const transcript = (response[0]?.results as Array<SpeechResult>)
+      ?.map((result) => result.alternatives?.[0]?.transcript || '')
       .join(' ')
       .trim() || '';
 
