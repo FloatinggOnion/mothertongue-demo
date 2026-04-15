@@ -4,22 +4,27 @@ import {
   getReplySuggestions,
 } from '@/services/gemini';
 import { getScenarioById } from '@/config/scenarios';
-import { Message, ProficiencyLevel } from '@/types';
+import { ChatSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+
+    // Validate request body with Zod
+    const validationResult = ChatSchema.safeParse(body);
+    if (!validationResult.success) {
+      return NextResponse.json(
+        { error: getZodErrorMessage(validationResult.error) },
+        { status: 400 }
+      );
+    }
+
     const {
       scenarioId,
       proficiencyLevel,
       conversationHistory,
       userMessage,
-    }: {
-      scenarioId: string;
-      proficiencyLevel: ProficiencyLevel;
-      conversationHistory: Message[];
-      userMessage: string;
-    } = body;
+    } = validationResult.data;
 
     const scenario = getScenarioById(scenarioId);
     if (!scenario) {

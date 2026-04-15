@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getScenarioById } from '@/config/scenarios';
 import {
   ConversationView,
+  EvaluationLoading,
   MicButton,
   ReplySuggestions,
   FeedbackCard,
@@ -27,12 +28,14 @@ export default function DrillPage() {
   // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [proficiencyLevel] = useState<ProficiencyLevel>('beginner');
   const [speakingStartTime, setSpeakingStartTime] = useState<number | null>(null);
   const [totalSpeakingTime, setTotalSpeakingTime] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<ReplySuggestion[]>([]);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [drillEnded, setDrillEnded] = useState(false);
   const [textInput, setTextInput] = useState('');
@@ -60,7 +63,7 @@ export default function DrillPage() {
   useEffect(() => {
     if (scenario && messages.length === 0) {
       const initialMessage: Message = {
-        id: 'initial',
+        id: crypto.randomUUID(),
         role: 'ai',
         content: scenario.starterPrompt,
         timestamp: Date.now(),
@@ -131,7 +134,7 @@ export default function DrillPage() {
     setShowSuggestions(false);
 
     const userMessage: Message = {
-      id: `user-${Date.now()}`,
+      id: crypto.randomUUID(),
       role: 'user',
       content: userText.trim(),
       timestamp: Date.now(),
@@ -155,7 +158,7 @@ export default function DrillPage() {
 
       if (data.reply) {
         const aiMessage: Message = {
-          id: `ai-${Date.now()}`,
+          id: crypto.randomUUID(),
           role: 'ai',
           content: data.reply,
           translation: data.translation,
@@ -213,28 +216,43 @@ export default function DrillPage() {
     await sendMessage(text);
   };
 
-  const handleEndDrill = async () => {
-    setDrillEnded(true);
-    setIsLoading(true);
+  const fetchEvaluation = async () => {
+    if (!scenario || messages.length === 0) return;
 
     try {
+      setEvaluationError(null);
+      setEvaluation(null);
+      setShowFeedback(false);
+      setIsEvaluating(true);
+
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scenarioId: scenario?.id,
-          messages,
+          scenarioId: scenario.id,
+          messages: messages.filter((m) => m.id !== 'initial'),
         }),
       });
+
+      if (!response.ok) {
+        throw new Error(`Evaluation failed with status ${response.status}`);
+      }
 
       const data = await response.json();
       setEvaluation(data);
       setShowFeedback(true);
     } catch (error) {
-      console.error('Failed to evaluate:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to evaluate conversation';
+      setEvaluationError(errorMessage);
+      setShowFeedback(true);
     } finally {
-      setIsLoading(false);
+      setIsEvaluating(false);
     }
+  };
+
+  const handleEndDrill = async () => {
+    setDrillEnded(true);
+    await fetchEvaluation();
   };
 
   const metrics: ConversationMetrics = {
@@ -408,19 +426,33 @@ export default function DrillPage() {
         </div>
       </div>
 
-      {/* Feedback Modal */}
-      {showFeedback && evaluation && (
+      {/* Evaluation loading indicator — shown while /api/evaluate request is in flight */}
+      <EvaluationLoading isVisible={isEvaluating} />
+
+      {/* Feedback Modal — shown when evaluation completes or errors */}
+      {showFeedback && (
         <FeedbackCard
-          evaluation={evaluation}
-          metrics={metrics}
-          onClose={() => router.push('/')}
-          onTryAgain={() => {
-            setMessages([]);
-            setEvaluation(null);
-            setShowFeedback(false);
-            setDrillEnded(false);
-            setTotalSpeakingTime(0);
-          }}
+          {...(evaluationError
+            ? {
+                state: 'error' as const,
+                errorMessage: evaluationError,
+                onRetry: fetchEvaluation,
+                onClose: () => router.push('/'),
+              }
+            : {
+                state: 'success' as const,
+                evaluation: evaluation!,
+                metrics: metrics,
+                onClose: () => router.push('/'),
+                onTryAgain: () => {
+                  setMessages([]);
+                  setEvaluation(null);
+                  setEvaluationError(null);
+                  setShowFeedback(false);
+                  setDrillEnded(false);
+                  setTotalSpeakingTime(0);
+                },
+              })}
         />
       )}
     </div>
