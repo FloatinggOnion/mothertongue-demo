@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { getScenarioById } from '@/config/scenarios';
 import {
   ConversationView,
+  EvaluationLoading,
   MicButton,
   ReplySuggestions,
   FeedbackCard,
@@ -27,16 +28,20 @@ export default function DrillPage() {
   // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isEvaluating, setIsEvaluating] = useState(false);
   const [proficiencyLevel] = useState<ProficiencyLevel>('beginner');
   const [speakingStartTime, setSpeakingStartTime] = useState<number | null>(null);
   const [totalSpeakingTime, setTotalSpeakingTime] = useState(0);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<ReplySuggestion[]>([]);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
+  const [evaluationError, setEvaluationError] = useState<string | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
   const [drillEnded, setDrillEnded] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [useTextMode, setUseTextMode] = useState(false);
+  const [lastActivityTime, setLastActivityTime] = useState(Date.now());
+  const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
 
   // Refs
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
@@ -60,7 +65,7 @@ export default function DrillPage() {
   useEffect(() => {
     if (scenario && messages.length === 0) {
       const initialMessage: Message = {
-        id: 'initial',
+        id: crypto.randomUUID(),
         role: 'ai',
         content: scenario.starterPrompt,
         timestamp: Date.now(),
@@ -81,56 +86,86 @@ export default function DrillPage() {
     }
   }, [messages]);
 
-  // Silence timer for suggestions with UX Guardrails
   useEffect(() => {
-    // GUARDRAIL: Hide/Reset if user is busy or AI is talking
-    if (isListening || isSpeaking || isLoading || drillEnded) {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-      setShowSuggestions(false); 
-      return;
-    }
+    if (drillEnded || showSuggestions) return;
 
-    // Only start timing if there is an existing conversation
+    const interval = setInterval(() => {
+    const now = Date.now();
+    const idleTime = now - lastActivityTime;
+
+    const isIdle =
+      !isListening &&
+      !isSpeaking &&
+      !isLoading &&
+      messages.length > 0;
+
+    if (isIdle && idleTime >= 8000) {
+      fetchSuggestions();
+    }
+  }, 1000);
+
+  return () => clearInterval(interval);
+  }, [
+  lastActivityTime,
+  isListening,
+  isSpeaking,
+  isLoading,
+  messages,
+  drillEnded,
+  showSuggestions,
+]);
+
+  useEffect(() => {
+    if (isListening || isSpeaking || isLoading) {
+    setLastActivityTime(Date.now());
+  }
+  }, [isListening, isSpeaking, isLoading]);
+
+  useEffect(() => {
     if (messages.length > 0) {
-      silenceTimerRef.current = setTimeout(() => {
-        // Only auto-fetch if suggestions aren't already visible
-        if (!showSuggestions) fetchSuggestions();
-      }, 8000); // Trigger after 8s of pure silence
+    setLastActivityTime(Date.now());
     }
-
-    return () => {
-      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
-    };
-  }, [isListening, isSpeaking, isLoading, messages, drillEnded, showSuggestions]);
+  }, [messages]);
 
   const fetchSuggestions = async () => {
-    // Avoid fetching if UI is currently active/busy
-    if (!scenario || messages.length === 0 || isListening || isSpeaking) return;
+  if (
+    !scenario ||
+    messages.length === 0 ||
+    isListening ||
+    isSpeaking ||
+    isFetchingSuggestions
+  ) return;
 
-    const lastAiMessage = [...messages].reverse().find((m) => m.role === 'ai');
-    if (!lastAiMessage) return;
+  const lastAiMessage = [...messages].reverse().find((m) => m.role === 'ai');
+  if (!lastAiMessage) return;
 
-    try {
-      const response = await fetch('/api/suggestions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scenarioId: scenario.id,
-          proficiencyLevel,
-          conversationHistory: messages,
-          lastAiMessage: lastAiMessage.content,
-        }),
-      });
+  try {
+    setIsFetchingSuggestions(true);
 
-      const data = await response.json();
-      if (data.suggestions) {
-        setSuggestions(data.suggestions);
-        setShowSuggestions(true);
-      }
-    } catch (error) {
-      console.error('Failed to fetch suggestions:', error);
+    const response = await fetch('/api/suggestions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scenarioId: scenario.id,
+        proficiencyLevel,
+        conversationHistory: messages,
+        lastAiMessage: lastAiMessage.content,
+      }),
+    });
+
+    const data = await response.json();
+
+    // Prevent flash if user suddenly starts talking
+    if (!isListening && !isSpeaking && data.suggestions) {
+      setSuggestions(data.suggestions);
+      setShowSuggestions(true);
     }
-  };
+  } catch (error) {
+    console.error('Failed to fetch suggestions:', error);
+  } finally {
+    setIsFetchingSuggestions(false);
+  }
+};
 
   // Send message to AI
   const sendMessage = async (userText: string) => {
@@ -139,7 +174,7 @@ export default function DrillPage() {
     setShowSuggestions(false);
 
     const userMessage: Message = {
-      id: `user-${Date.now()}`,
+      id: crypto.randomUUID(),
       role: 'user',
       content: userText.trim(),
       timestamp: Date.now(),
@@ -163,7 +198,7 @@ export default function DrillPage() {
 
       if (data.reply) {
         const aiMessage: Message = {
-          id: `ai-${Date.now()}`,
+          id: crypto.randomUUID(),
           role: 'ai',
           content: data.reply,
           translation: data.translation,
@@ -222,28 +257,43 @@ export default function DrillPage() {
     await sendMessage(text);   // Execute the send
   };
 
-  const handleEndDrill = async () => {
-    setDrillEnded(true);
-    setIsLoading(true);
+  const fetchEvaluation = async () => {
+    if (!scenario || messages.length === 0) return;
 
     try {
+      setEvaluationError(null);
+      setEvaluation(null);
+      setShowFeedback(false);
+      setIsEvaluating(true);
+
       const response = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          scenarioId: scenario?.id,
-          messages,
+          scenarioId: scenario.id,
+          messages: messages.filter((m) => m.id !== 'initial'),
         }),
       });
+
+      if (!response.ok) {
+        throw new Error(`Evaluation failed with status ${response.status}`);
+      }
 
       const data = await response.json();
       setEvaluation(data);
       setShowFeedback(true);
     } catch (error) {
-      console.error('Failed to evaluate:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Failed to evaluate conversation';
+      setEvaluationError(errorMessage);
+      setShowFeedback(true);
     } finally {
-      setIsLoading(false);
+      setIsEvaluating(false);
     }
+  };
+
+  const handleEndDrill = async () => {
+    setDrillEnded(true);
+    await fetchEvaluation();
   };
 
   const metrics: ConversationMetrics = {
@@ -367,10 +417,12 @@ export default function DrillPage() {
       <div className="flex flex-col items-center mb-2">
         {!showSuggestions && !isListening && !isSpeaking && !isLoading && !drillEnded && (
           <button
-            onClick={() => fetchSuggestions()}
-            className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 hover:bg-white/10 text-emerald-400 px-3 py-1 rounded-full transition-all flex items-center gap-2 mb-2"
+            onClick={fetchSuggestions}
+            disabled={isFetchingSuggestions}
+            className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 hover:bg-white/10 text-emerald-400 px-3 py-1 rounded-full transition-all flex items-center gap-2 mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span className="animate-pulse">💡</span> Need help replying?
+            <span className="animate-pulse">💡</span>
+            {isFetchingSuggestions ? 'Loading...' : 'Need help replying?'}
           </button>
         )}
         
@@ -458,19 +510,33 @@ export default function DrillPage() {
         </div>
       </div>
 
-      {/* Feedback Modal */}
-      {showFeedback && evaluation && (
+      {/* Evaluation loading indicator — shown while /api/evaluate request is in flight */}
+      <EvaluationLoading isVisible={isEvaluating} />
+
+      {/* Feedback Modal — shown when evaluation completes or errors */}
+      {showFeedback && (
         <FeedbackCard
-          evaluation={evaluation}
-          metrics={metrics}
-          onClose={() => router.push('/')}
-          onTryAgain={() => {
-            setMessages([]);
-            setEvaluation(null);
-            setShowFeedback(false);
-            setDrillEnded(false);
-            setTotalSpeakingTime(0);
-          }}
+          {...(evaluationError
+            ? {
+                state: 'error' as const,
+                errorMessage: evaluationError,
+                onRetry: fetchEvaluation,
+                onClose: () => router.push('/'),
+              }
+            : {
+                state: 'success' as const,
+                evaluation: evaluation!,
+                metrics: metrics,
+                onClose: () => router.push('/'),
+                onTryAgain: () => {
+                  setMessages([]);
+                  setEvaluation(null);
+                  setEvaluationError(null);
+                  setShowFeedback(false);
+                  setDrillEnded(false);
+                  setTotalSpeakingTime(0);
+                },
+              })}
         />
       )}
     </div>

@@ -1,59 +1,82 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { TextToSpeechClient } from '@google-cloud/text-to-speech';
+import { TtsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
+
+// Map gender to Google Cloud TTS Nigerian voices
+const VOICE_MAPPING = {
+  male: 'en-NG-Wavenet-B',   // Yomi-style male voice
+  female: 'en-NG-Wavenet-A', // Olufunmilola-style female voice
+};
+
+// Initialize client with credentials from environment variables
+const client = new TextToSpeechClient({
+  credentials: {
+    client_email: process.env.GOOGLE_CLIENT_EMAIL,
+    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  },
+});
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Capture the new parameters sent from your useSpeech hook
-    const { text, gender, voiceId } = await request.json();
+    const body = await request.json();
 
-    if (!text) {
-      return NextResponse.json({ error: 'Text is required' }, { status: 400 });
-    }
-
-    const modalUrl = process.env.MODAL_TTS_URL;
-    if (!modalUrl) {
-      console.error('MODAL_TTS_URL is not set');
+    const validationResult = TtsSchema.safeParse(body);
+    if (!validationResult.success) {
       return NextResponse.json(
-        { error: 'TTS service not configured' },
-        { status: 503 }
+        { error: getZodErrorMessage(validationResult.error) },
+        { status: 400 }
       );
     }
 
-    const endpoint = modalUrl.endsWith('/generate') 
-      ? modalUrl 
-      : `${modalUrl.replace(/\/$/, '')}/generate`;
+    const { text, gender } = validationResult.data;
 
-    // 2. Pass gender and voiceId to your Modal deployment
-    const response = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
+    // Default to female (en-NG-Wavenet-A) if gender not specified
+    const voiceName = (gender === 'male' || gender === 'female')
+      ? VOICE_MAPPING[gender]
+      : VOICE_MAPPING.female;
+
+    const [response] = await client.synthesizeSpeech({
+      input: { text },
+      voice: {
+        languageCode: 'en-NG',
+        name: voiceName,
+        ssmlGender: gender === 'male' ? 'MALE' : 'FEMALE'
       },
-      body: JSON.stringify({ 
-        text,
-        gender: gender || 'male', // Ensure a fallback
-        voiceId: voiceId || 'yo-NG' 
-      }),
+      audioConfig: {
+        audioEncoding: 'MP3',
+        speakingRate: 1.0,
+        pitch: 0.0,
+      },
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Modal TTS API error:', errorText);
+    const audioContent = response.audioContent;
+
+    if (!audioContent) {
+      console.error('Google TTS returned empty audio content');
       return NextResponse.json(
-        { error: 'Failed to generate speech' },
-        { status: response.status }
+        { error: 'Failed to generate speech content' },
+        { status: 500 }
       );
     }
 
-    const audioBuffer = await response.arrayBuffer();
-    
-    return new NextResponse(audioBuffer, {
+    // Return audio as MP3
+    return new NextResponse(audioContent as Buffer, {
       headers: {
-        'Content-Type': 'audio/wav',
-        'Content-Length': audioBuffer.byteLength.toString(),
+        'Content-Type': 'audio/mpeg',
+        'Content-Length': audioContent.length.toString(),
       },
     });
-  } catch (error) {
-    console.error('TTS API error:', error);
+  } catch (error: any) {
+    console.error('Google TTS API error:', error);
+
+    // Check for obvious auth issues
+    if (error.message?.includes('credentials')) {
+      return NextResponse.json(
+        { error: 'Google Cloud credentials not configured or invalid' },
+        { status: 500 }
+      );
+    }
+
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500 }

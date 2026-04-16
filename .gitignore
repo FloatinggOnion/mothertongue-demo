@@ -40,5 +40,11 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-#credentials
-credentials.json
+# error logs (may contain sensitive data)
+/logs/
+
+# JSON
+*.json
+!.planning/*.json
+
+hackathon.md
