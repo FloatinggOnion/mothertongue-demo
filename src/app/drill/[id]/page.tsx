@@ -54,7 +54,7 @@ export default function DrillPage() {
     error: sttError,
   } = useSpeechRecognition();
 
-  const { speak, isSpeaking } = useSpeechSynthesis();
+  const { speak, stop, isSpeaking, usingFallback, error: ttsError } = useSpeechSynthesis();
 
   // Add initial AI message when scenario loads
   useEffect(() => {
@@ -81,23 +81,31 @@ export default function DrillPage() {
     }
   }, [messages]);
 
-  // Silence timer for suggestions
+  // Silence timer for suggestions with UX Guardrails
   useEffect(() => {
-    if (!isListening && !isSpeaking && !isLoading && messages.length > 0 && !drillEnded) {
+    // GUARDRAIL: Hide/Reset if user is busy or AI is talking
+    if (isListening || isSpeaking || isLoading || drillEnded) {
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+      setShowSuggestions(false); 
+      return;
+    }
+
+    // Only start timing if there is an existing conversation
+    if (messages.length > 0) {
       silenceTimerRef.current = setTimeout(() => {
-        fetchSuggestions();
-      }, 10000); // Show suggestions after 10 seconds of silence
+        // Only auto-fetch if suggestions aren't already visible
+        if (!showSuggestions) fetchSuggestions();
+      }, 8000); // Trigger after 8s of pure silence
     }
 
     return () => {
-      if (silenceTimerRef.current) {
-        clearTimeout(silenceTimerRef.current);
-      }
+      if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
     };
-  }, [isListening, isSpeaking, isLoading, messages, drillEnded]);
+  }, [isListening, isSpeaking, isLoading, messages, drillEnded, showSuggestions]);
 
   const fetchSuggestions = async () => {
-    if (!scenario || messages.length === 0) return;
+    // Avoid fetching if UI is currently active/busy
+    if (!scenario || messages.length === 0 || isListening || isSpeaking) return;
 
     const lastAiMessage = [...messages].reverse().find((m) => m.role === 'ai');
     if (!lastAiMessage) return;
@@ -210,7 +218,8 @@ export default function DrillPage() {
   };
 
   const handleSuggestionSelect = async (text: string) => {
-    await sendMessage(text);
+    setShowSuggestions(false); // Immediate Action: Close the tray
+    await sendMessage(text);   // Execute the send
   };
 
   const handleEndDrill = async () => {
@@ -310,6 +319,36 @@ export default function DrillPage() {
       >
         <ConversationView messages={messages} isLoading={isLoading} />
 
+        {isLoading && (
+          <div className="px-6 py-2 flex items-center gap-3 animate-pulse">
+            <div className="flex gap-1">
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" />
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce [animation-delay:-.3s]" />
+              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce [animation-delay:-.5s]" />
+          </div>
+          <span className="text-xs text-emerald-400/80 italic font-medium">
+            {messages.length <= 1 
+              ? "AI is waking up (this takes ~30s the first time)..." 
+              : "Generating Yoruba audio..."}
+          </span>
+        </div>
+        )}
+
+        {isSpeaking && (
+          <div className="px-6 py-1 flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
+            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">
+              {usingFallback ? "Local Voice Active" : "AI Voice Streaming"}
+            </span>
+            <button 
+              onClick={stop}
+              className="ml-2 text-[10px] text-red-400/70 hover:text-red-400 underline decoration-dotted"
+            >
+              Stop Audio
+            </button>
+          </div>
+      )}
+
         {/* Live transcript */}
         {(transcript || interimTranscript) && (
           <div className="px-4 mb-4">
@@ -324,12 +363,23 @@ export default function DrillPage() {
         )}
       </div>
 
-      {/* Suggestions */}
-      <ReplySuggestions
-        suggestions={suggestions}
-        onSelect={handleSuggestionSelect}
-        isVisible={showSuggestions && !drillEnded}
-      />
+      {/* Suggestions Tray & Manual Trigger */}
+      <div className="flex flex-col items-center mb-2">
+        {!showSuggestions && !isListening && !isSpeaking && !isLoading && !drillEnded && (
+          <button
+            onClick={() => fetchSuggestions()}
+            className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 hover:bg-white/10 text-emerald-400 px-3 py-1 rounded-full transition-all flex items-center gap-2 mb-2"
+          >
+            <span className="animate-pulse">💡</span> Need help replying?
+          </button>
+        )}
+        
+        <ReplySuggestions
+          suggestions={suggestions}
+          onSelect={handleSuggestionSelect}
+          isVisible={showSuggestions && !drillEnded && !isListening && !isSpeaking}
+        />
+      </div>
 
       {/* Input Area */}
       <div className="sticky bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent pt-6 pb-6">

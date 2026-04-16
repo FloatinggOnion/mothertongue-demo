@@ -115,7 +115,7 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
         const recognition = new SpeechRecognition();
         recognition.continuous = true;
         recognition.interimResults = true;
-        recognition.lang = 'en-NG';
+        recognition.lang = 'yo-NG';
 
         recognition.onstart = () => {
           setIsListening(true);
@@ -224,25 +224,30 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   };
 }
 
-
-// --- Speech Synthesis Hook (ElevenLabs + Server-side) ---
-
+// --- Speech Synthesis Hook (Modal + Browser Fallback) ---
 interface UseSpeechSynthesisReturn {
   speak: (text: string, gender?: 'male' | 'female') => void;
   stop: () => void;
   isSpeaking: boolean;
+  usingFallback: boolean; // Added for UI messaging
+  error: string | null;    // Added for tightening error handling
   isSupported: boolean;
 }
 
 export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false); // Track fallback state
+  const [error, setError] = useState<string | null>(null);    // Track errors
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     // Initialize audio element
     audioRef.current = new Audio();
     audioRef.current.onended = () => setIsSpeaking(false);
-    audioRef.current.onerror = () => setIsSpeaking(false);
+    audioRef.current.onerror = () => {
+      setIsSpeaking(false);
+      setError("Audio playback error");
+    };
   }, []);
 
   const speak = useCallback(async (text: string, gender?: 'male' | 'female') => {
@@ -250,6 +255,8 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
     
     try {
       setIsSpeaking(true);
+      setError(null);
+      setUsingFallback(false);
       
       // Stop current audio if playing
       if (audioRef.current) {
@@ -261,10 +268,14 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, gender }),
+        body: JSON.stringify({ 
+          text,
+          voiceId: 'yo-NG',
+          gender: gender ?? 'male' 
+        }),
       });
 
-      if (!response.ok) throw new Error('TTS request failed');
+      if (!response.ok) throw new Error('TTS server request failed');
 
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
@@ -273,24 +284,58 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         audioRef.current.src = url;
         await audioRef.current.play();
       }
-    } catch (error) {
-      console.error('Speech synthesis error:', error);
-      setIsSpeaking(false);
+    } catch (err) {
+      console.warn('Server TTS failed, using browser fallback:', err);
+      setUsingFallback(true); // Explicitly flag the fallback for UI messaging
+      
+      // --- BROWSER NATIVE FALLBACK ---
+      if (typeof window !== 'undefined' && window.speechSynthesis) {
+        // Cancel any ongoing browser speech
+        window.speechSynthesis.cancel();
+        
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = 'yo-NG'; 
+        
+        utterance.onstart = () => setIsSpeaking(true);
+        utterance.onend = () => {
+          setIsSpeaking(false);
+          setUsingFallback(false);
+        };
+        utterance.onerror = (e) => {
+          console.error("Browser TTS Error:", e);
+          setIsSpeaking(false);
+          setUsingFallback(false);
+          setError("Speech synthesis failed");
+        };
+        
+        window.speechSynthesis.speak(utterance);
+      } else {
+        setIsSpeaking(false);
+        setError("Speech not supported on this device");
+      }
     }
   }, []);
 
   const stop = useCallback(() => {
+    // Stop Server Audio
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
-      setIsSpeaking(false);
     }
+    // Stop Browser Audio
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+    setIsSpeaking(false);
+    setUsingFallback(false);
   }, []);
 
   return {
     speak,
     stop,
     isSpeaking,
-    isSupported: true, // Always supported via server API
+    usingFallback,
+    error,
+    isSupported: true,
   };
 }
