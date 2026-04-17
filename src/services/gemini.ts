@@ -13,6 +13,8 @@ import { logError } from '@/lib/logger';
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-4-26b-a4b-it:free';
+const GROQ_API_KEY = process.env.GROQ_API_KEY;
+const GROQ_MODEL = 'llama-3.3-70b-versatile';
 
 function toOpenRouterMessages(
   contents: any[],
@@ -30,6 +32,34 @@ function toOpenRouterMessages(
     messages.push({ role, content });
   }
   return messages;
+}
+
+async function doGroqRequest(
+  messages: { role: string; content: string }[],
+  temperature: number,
+  maxOutputTokens: number
+): Promise<string> {
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${GROQ_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      messages,
+      temperature,
+      max_tokens: maxOutputTokens,
+    }),
+  });
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw Object.assign(new Error(`Groq error: ${res.status}`), { status: res.status, body });
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? '';
 }
 
 async function doOpenRouterRequest(
@@ -71,6 +101,7 @@ export async function callGemini(options: {
   const { contents, systemInstruction, temperature = 0.7, maxOutputTokens = 200 } = options;
   const messages = toOpenRouterMessages(contents, systemInstruction);
 
+  let openRouterError: any;
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
       return await doOpenRouterRequest(messages, temperature, maxOutputTokens);
@@ -81,12 +112,23 @@ export async function callGemini(options: {
         await new Promise((r) => setTimeout(r, delay));
         continue;
       }
-      logError('/api/openrouter-call', error, { attempt: attempt + 1, status: error?.status });
-      throw error;
+      openRouterError = error;
+      break;
     }
   }
 
-  throw new Error('OpenRouter: max retries exceeded');
+  if (GROQ_API_KEY) {
+    console.warn(`[OpenRouter] Failed (${openRouterError?.message}), falling back to Groq...`);
+    try {
+      return await doGroqRequest(messages, temperature, maxOutputTokens);
+    } catch (groqError: any) {
+      logError('/api/groq-fallback', groqError, { originalError: openRouterError?.message });
+      throw groqError;
+    }
+  }
+
+  logError('/api/openrouter-call', openRouterError, { status: openRouterError?.status });
+  throw openRouterError ?? new Error('OpenRouter: max retries exceeded');
 }
 
 // System prompt for the conversational partner
