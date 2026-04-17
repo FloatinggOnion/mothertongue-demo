@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const audioContent = Buffer.from(arrayBuffer);
 
     // Get Google Cloud project ID from environment
-    const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
+    const projectId = process.env.GOOGLE_CLOUD_PROJECT;
     if (!projectId) {
       return NextResponse.json(
         { error: 'Google Cloud project ID not configured' },
@@ -62,9 +62,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ transcription: transcript });
   } catch (error) {
-    console.error('Transcription API error:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('Transcription API error:', errorMsg);
     return NextResponse.json(
-      { error: 'Failed to transcribe audio' },
+      { error: 'Failed to transcribe audio', details: errorMsg },
       { status: 500 }
     );
   }

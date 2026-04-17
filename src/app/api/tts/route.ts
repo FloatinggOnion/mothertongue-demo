@@ -2,11 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import { TtsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
-// Map gender to Google Cloud TTS Nigerian voices
-const VOICE_MAPPING = {
-  male: 'en-NG-Wavenet-B',   // Yomi-style male voice
-  female: 'en-NG-Wavenet-A', // Olufunmilola-style female voice
-};
+// Yoruba (Nigeria) TTS - let Google Cloud pick the default voice for yo-NG locale
 
 // Initialize client with credentials from environment variables
 const client = new TextToSpeechClient({
@@ -30,16 +26,10 @@ export async function POST(request: NextRequest) {
 
     const { text, gender } = validationResult.data;
 
-    // Default to female (en-NG-Wavenet-A) if gender not specified
-    const voiceName = (gender === 'male' || gender === 'female')
-      ? VOICE_MAPPING[gender]
-      : VOICE_MAPPING.female;
-
     const [response] = await client.synthesizeSpeech({
       input: { text },
       voice: {
         languageCode: 'yo-NG',
-        name: voiceName,
         ssmlGender: gender === 'male' ? 'MALE' : 'FEMALE'
       },
       audioConfig: {
@@ -60,17 +50,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Return audio as MP3
-    return new NextResponse(new Uint8Array(audioContent as Buffer), {
+    const audioBytes = typeof audioContent === 'string'
+      ? new TextEncoder().encode(audioContent)
+      : audioContent;
+
+    return new Response(audioBytes as unknown as BodyInit, {
       headers: {
         'Content-Type': 'audio/mpeg',
         'Content-Length': audioContent.length.toString(),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Google TTS API error:', error);
 
-    // Check for obvious auth issues
-    if (error.message?.includes('credentials')) {
+    if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as { message: unknown }).message === 'string' && (error as { message: string }).message.includes('credentials')) {
       return NextResponse.json(
         { error: 'Google Cloud credentials not configured or invalid' },
         { status: 500 }
