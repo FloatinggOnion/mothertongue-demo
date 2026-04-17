@@ -69,6 +69,12 @@ export default function DrillPage() {
   // Refs
   const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
+  // Used to bridge the async STT transcription gap: handleMicRelease awaits a
+  // Promise that resolves when the STT hook signals it has finished (interimTranscript
+  // returns to '' after showing 'Processing audio...'). This eliminates the race
+  // condition where a fixed 300ms timeout fires before the server-side fetch completes.
+  const transcriptReadyResolveRef = useRef<((text: string) => void) | null>(null);
+  const processingStartedRef = useRef(false);
 
   // Speech hooks
   const {
@@ -83,6 +89,23 @@ export default function DrillPage() {
   } = useSpeechRecognition();
 
   const { speak, stop, isSpeaking, usingFallback, error: ttsError } = useSpeechSynthesis();
+
+  // Watch interimTranscript to detect when STT server-side transcription completes.
+  // The STT hook sets interimTranscript to 'Processing audio...' while the fetch is
+  // in-flight, then clears it to '' in the finally block. When we see it go back to ''
+  // while processingStartedRef is true, transcription is done and transcript state is
+  // settled — resolve the pending promise so handleMicRelease can proceed.
+  useEffect(() => {
+    if (interimTranscript === 'Processing audio...') {
+      processingStartedRef.current = true;
+    } else if (interimTranscript === '' && processingStartedRef.current) {
+      processingStartedRef.current = false;
+      if (transcriptReadyResolveRef.current) {
+        transcriptReadyResolveRef.current(transcript);
+        transcriptReadyResolveRef.current = null;
+      }
+    }
+  }, [interimTranscript, transcript]);
 
   // Add initial AI message when scenario loads
   useEffect(() => {
@@ -250,16 +273,29 @@ export default function DrillPage() {
       setSpeakingStartTime(null);
     }
 
-    // Wait a bit for final transcript
-    await new Promise((resolve) => setTimeout(resolve, 300));
+    // Wait for the STT hook to finish its server-side transcription fetch.
+    // The hook sets interimTranscript to 'Processing audio...' while the fetch is
+    // in-flight, then clears it back to '' when done. A useEffect above watches for
+    // that transition and resolves this Promise with the final transcript text.
+    // We also set a 10s safety timeout so we never hang forever.
+    const userText = await new Promise<string>((resolve) => {
+      transcriptReadyResolveRef.current = resolve;
+      // Safety timeout: if STT hook never emits the ready signal (e.g. no audio
+      // was recorded and onstop never fired), resolve with empty string after 10s.
+      setTimeout(() => {
+        if (transcriptReadyResolveRef.current === resolve) {
+          transcriptReadyResolveRef.current = null;
+          resolve('');
+        }
+      }, 10000);
+    });
 
-    const userText = transcript.trim();
     resetTranscript();
 
-    if (userText) {
-      await sendMessage(userText);
+    if (userText.trim()) {
+      await sendMessage(userText.trim());
     }
-  }, [stopListening, speakingStartTime, transcript, resetTranscript, sendMessage]);
+  }, [stopListening, speakingStartTime, resetTranscript, sendMessage]);
 
   const handleTextSubmit = async (e: FormEvent) => {
     e.preventDefault();
