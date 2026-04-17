@@ -25,6 +25,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { text, gender } = validationResult.data;
+    console.log('[TTS] Request:', { textLength: text.length, gender });
 
     const [response] = await client.synthesizeSpeech({
       input: { text },
@@ -43,16 +44,18 @@ export async function POST(request: NextRequest) {
     const audioContent = response.audioContent;
 
     if (!audioContent) {
-      console.error('Google TTS returned empty audio content');
+      console.error('[TTS] Google TTS returned empty audio content');
       return NextResponse.json(
         { error: 'Failed to generate speech content' },
         { status: 500 }
       );
     }
 
+    console.log('[TTS] Success, audioContent type:', typeof audioContent, 'length:', audioContent.length);
+
     // Return audio as MP3
     const audioBytes = typeof audioContent === 'string'
-      ? new TextEncoder().encode(audioContent)
+      ? Buffer.from(audioContent, 'base64')
       : audioContent;
 
     return new Response(audioBytes as unknown as BodyInit, {
@@ -62,7 +65,8 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (error: unknown) {
-    console.error('Google TTS API error:', error);
+    const msg = error instanceof Error ? error.message : String(error);
+    console.error('[TTS] Google TTS API error:', msg);
 
     if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as { message: unknown }).message === 'string' && (error as { message: string }).message.includes('credentials')) {
       return NextResponse.json(

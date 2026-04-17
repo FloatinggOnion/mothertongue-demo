@@ -1,6 +1,5 @@
 'use server';
 
-import { GoogleGenAI } from '@google/genai';
 import {
   Scenario,
   Message,
@@ -12,12 +11,6 @@ import {
 } from '@/types';
 import { logError } from '@/lib/logger';
 
-const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
-
-// Model to use - Gemini 3
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-
-// OpenRouter fallback config
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-4-26b-a4b-it:free';
 
@@ -39,17 +32,11 @@ function toOpenRouterMessages(
   return messages;
 }
 
-async function callOpenRouter(options: {
-  contents: any[];
-  systemInstruction?: string;
-  temperature?: number;
-  maxOutputTokens?: number;
-}): Promise<string> {
-  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
-
-  const { contents, systemInstruction, temperature = 0.7, maxOutputTokens = 200 } = options;
-  const messages = toOpenRouterMessages(contents, systemInstruction);
-
+async function doOpenRouterRequest(
+  messages: { role: string; content: string }[],
+  temperature: number,
+  maxOutputTokens: number
+): Promise<string> {
   const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -65,87 +52,41 @@ async function callOpenRouter(options: {
   });
 
   if (!res.ok) {
-    throw new Error(`OpenRouter error: ${res.status}`);
+    const body = await res.text().catch(() => '');
+    throw Object.assign(new Error(`OpenRouter error: ${res.status}`), { status: res.status, body });
   }
 
   const data = await res.json();
   return data.choices?.[0]?.message?.content ?? '';
 }
 
-// Backoff windows per REQUIREMENTS.md (attempt N uses index N-1)
-const RETRY_WINDOWS_MS: [number, number][] = [
-  [2000, 4000], // Attempt 1 retry: 2–4 seconds
-  [8000, 16000], // Attempt 2 retry: 8–16 seconds
-  [32000, 64000], // Attempt 3 retry: 32–64 seconds (not used — throw after 3 attempts)
-];
-
-function isRetryable(error: any): boolean {
-  const status = error?.status ?? error?.statusCode ?? error?.code;
-  return status === 429 || status === 503 || status === 502;
-}
-
-function jitteredDelay([min, max]: [number, number]): number {
-  return min + Math.random() * (max - min);
-}
-
-// Helper to handle API calls with exponential backoff retry
 export async function callGemini(options: {
   contents: any[];
   systemInstruction?: string;
   temperature?: number;
   maxOutputTokens?: number;
 }): Promise<string> {
-  const { contents, systemInstruction, temperature = 0.7, maxOutputTokens = 200 } = options;
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
 
-  let lastError: unknown;
+  const { contents, systemInstruction, temperature = 0.7, maxOutputTokens = 200 } = options;
+  const messages = toOpenRouterMessages(contents, systemInstruction);
 
   for (let attempt = 0; attempt < 3; attempt++) {
     try {
-      const response = await genAI.models.generateContent({
-        model: MODEL,
-        contents,
-        config: {
-          systemInstruction,
-          temperature,
-          maxOutputTokens,
-        },
-      });
-      return response.text || '';
+      return await doOpenRouterRequest(messages, temperature, maxOutputTokens);
     } catch (error: any) {
-      lastError = error;
-
-      if (!isRetryable(error) || attempt === 2) {
-        logError('/api/gemini-call', error, {
-          attempt: attempt + 1,
-          isRetryable: isRetryable(error),
-          status: error?.status ?? error?.statusCode,
-        });
-        break; // fall through to OpenRouter fallback
+      if (error?.status === 429 && attempt < 2) {
+        const delay = (attempt + 1) * 3000;
+        console.warn(`[OpenRouter] 429 rate limit, retrying in ${delay / 1000}s...`);
+        await new Promise((r) => setTimeout(r, delay));
+        continue;
       }
-
-      // Retryable error — wait with jittered backoff before next attempt
-      const delayRange = RETRY_WINDOWS_MS[attempt];
-      const delay = jitteredDelay(delayRange);
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      logError('/api/openrouter-call', error, { attempt: attempt + 1, status: error?.status });
+      throw error;
     }
   }
 
-  // Gemini failed — try OpenRouter fallback
-  if (OPENROUTER_API_KEY) {
-    console.log('[OpenRouter] Gemini failed, trying fallback with model:', OPENROUTER_MODEL);
-    try {
-      const result = await callOpenRouter(options);
-      console.log('[OpenRouter] Fallback succeeded');
-      return result;
-    } catch (fallbackError) {
-      console.error('[OpenRouter] Fallback also failed:', fallbackError);
-      logError('/api/openrouter-fallback', fallbackError, {});
-    }
-  } else {
-    console.warn('[OpenRouter] No OPENROUTER_API_KEY set — cannot fall back');
-  }
-
-  throw lastError;
+  throw new Error('OpenRouter: max retries exceeded');
 }
 
 // System prompt for the conversational partner
@@ -234,17 +175,11 @@ export async function getPartnerResponse(
 ): Promise<GeminiResponse> {
   const systemPrompt = buildPartnerSystemPrompt(scenario, proficiencyLevel);
 
-  // Build conversation context
   const messages = conversationHistory.map((m) => ({
     role: m.role === 'ai' ? 'model' : 'user',
     parts: [{ text: m.content }],
   }));
-
-  // Add the new user message
-  messages.push({
-    role: 'user',
-    parts: [{ text: userMessage }],
-  });
+  messages.push({ role: 'user', parts: [{ text: userMessage }] });
 
   const reply = await callGemini({
     contents: messages,
@@ -253,32 +188,23 @@ export async function getPartnerResponse(
     maxOutputTokens: 200,
   });
 
-  // Get translation for the response (skip if reply is mostly English)
   let translation = reply;
   try {
     translation = await callGemini({
       contents: [
         {
           role: 'user',
-          parts: [
-            {
-              text: `Translate this to English. Only output the translation, nothing else: "${reply}"`,
-            },
-          ],
+          parts: [{ text: `Translate this to English. Only output the translation, nothing else: "${reply}"` }],
         },
       ],
       temperature: 0.1,
       maxOutputTokens: 200,
     });
   } catch {
-    // If translation fails, just use the reply
     translation = reply;
   }
 
-  return {
-    reply,
-    translation: translation || reply,
-  };
+  return { reply, translation: translation || reply };
 }
 
 export async function getReplySuggestions(
@@ -323,7 +249,6 @@ Only output the JSON, nothing else.`,
     const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
     return JSON.parse(cleaned);
   } catch {
-    // Return static fallback suggestions
     return [
       { text: 'Ẹ ṣe o', translation: 'Thank you' },
       { text: 'Báwo ni?', translation: 'How is it?' },
@@ -338,21 +263,14 @@ export async function evaluateConversation(
   const systemPrompt = buildEvaluatorSystemPrompt();
 
   const conversationText = messages
-    .map(
-      (m) =>
-        `${m.role === 'user' ? 'LEARNER' : 'AI PARTNER'}: ${m.content}`
-    )
+    .map((m) => `${m.role === 'user' ? 'LEARNER' : 'AI PARTNER'}: ${m.content}`)
     .join('\n');
 
   const text = await callGemini({
     contents: [
       {
         role: 'user',
-        parts: [
-          {
-            text: `Evaluate this conversation:\n\n${conversationText}`,
-          },
-        ],
+        parts: [{ text: `Evaluate this conversation:\n\n${conversationText}` }],
       },
     ],
     systemInstruction: systemPrompt,
@@ -424,11 +342,7 @@ export async function translateText(
       contents: [
         {
           role: 'user',
-          parts: [
-            {
-              text: `Translate this to ${targetLanguage}. Only output the translation: "${text}"`,
-            },
-          ],
+          parts: [{ text: `Translate this to ${targetLanguage}. Only output the translation: "${text}"` }],
         },
       ],
       temperature: 0.1,
