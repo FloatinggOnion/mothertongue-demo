@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       config: {
         autoDecodingConfig: {},
         model: 'chirp_3',
-        languageCodes: ['yo-NG', 'en-NG'],
+        languageCodes: ['yo-NG'],
       },
       content: audioContent,
     });
