@@ -16,8 +16,8 @@ export function MessageBubble({
   const isUser = message.role === 'user';
 
   return (
-    <div
-      className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4 animate-fade-in`}
+    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 
+    animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both`}
     >
       <div
         className={`relative max-w-[80%] px-4 py-3 rounded-2xl ${
@@ -49,18 +49,51 @@ export function MessageBubble({
 interface ConversationViewProps {
   messages: Message[];
   isLoading?: boolean;
+  isListening?: boolean;   // NEW
+  isSpeaking?: boolean;    // NEW
 }
 
 export function ConversationView({
   messages,
   isLoading = false,
+  isListening = false,
+  isSpeaking = false,
 }: ConversationViewProps) {
   return (
-    <div className="flex-1 overflow-y-auto px-4 py-6 space-y-2">
-      {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
-      ))}
+    <div className="flex-1 overflow-y-auto px-4 py-8 space-y-4">
+  {/* --- CENTERED EMPTY STATE --- */}
+        {messages.length === 0 && !isLoading && (
+          <div className="flex flex-col items-center justify-center py-20 opacity-50 text-center animate-in fade-in zoom-in-95 duration-1000">
+            <div className="bg-emerald-500/10 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20">
+              <span className="text-4xl">🎤</span>
+            </div>
+            <h3 className="text-white font-semibold text-xl tracking-tight">Ready for your Drill?</h3>
+            <p className="text-slate-400 text-sm max-w-[280px] mx-auto mt-3 leading-relaxed">
+              The AI is preparing your scenario. Listen for the greeting or start speaking in Yoruba.
+            </p>
+          </div>
+        )}
 
+  {messages.map((message) => (
+    <MessageBubble key={message.id} message={message} />
+  ))}
+      {/* 🎙️ Listening Indicator */}
+        {isListening && (
+          <div className="flex justify-end mb-4">
+            <div className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs px-4 py-2 rounded-2xl">
+              🎙️ Listening...
+            </div>
+          </div>
+        )}
+
+      {/* 🔊 Speaking Indicator */}
+        {isSpeaking && (
+          <div className="flex justify-start mb-4">
+            <div className="bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs px-4 py-2 rounded-2xl animate-pulse">
+              🔊 Speaking...
+            </div>
+          </div>
+        )}
       {isLoading && (
         <div className="flex justify-start mb-4">
           <div className="bg-white/10 backdrop-blur-sm text-white border border-white/20 rounded-2xl rounded-bl-sm px-4 py-3">
@@ -78,6 +111,13 @@ export function ConversationView({
           </div>
         </div>
       )}
+
+      {/* 💡 Idle Hint */}
+        {!isLoading && !isListening && !isSpeaking && messages.length > 0 && (
+          <div className="text-center text-[10px] text-slate-500 mt-2 animate-pulse">
+            Tap the mic or type to continue…
+          </div>
+        )}
     </div>
   );
 }
