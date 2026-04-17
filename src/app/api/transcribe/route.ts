@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { SpeechClient, protos } from '@google-cloud/speech';
+import { v2, protos } from '@google-cloud/speech';
 
 type SpeechResult = protos.google.cloud.speech.v2.SpeechRecognitionResult;
 
-// Initialize Speech-to-Text v2 client with credentials
-const speechClient = new SpeechClient({
+const REGION = 'us';
+
+// Initialize Speech-to-Text v2 client with credentials and region
+const speechClient = new v2.SpeechClient({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
     private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
   },
+  apiEndpoint: `${REGION}-speech.googleapis.com`,
 });
 
 export async function POST(request: NextRequest) {
@@ -20,9 +23,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'audio is required' }, { status: 400 });
     }
 
-    // Convert blob to base64
+    // Convert blob to buffer
     const arrayBuffer = await audioFile.arrayBuffer();
-    const base64Audio = Buffer.from(arrayBuffer).toString('base64');
+    const audioContent = Buffer.from(arrayBuffer);
 
     // Get Google Cloud project ID from environment
     const projectId = process.env.GOOGLE_CLOUD_PROJECT_ID;
@@ -33,18 +36,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Speech-to-Text v2 API request (SDK types are v1; cast to bypass)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response = await (speechClient.recognize as any)({
-      recognizer: `projects/${projectId}/locations/global/recognizers/_`,
+    // Speech-to-Text v2 API request
+    const response = await speechClient.recognize({
+      recognizer: `projects/${projectId}/locations/${REGION}/recognizers/_`,
       config: {
         autoDecodingConfig: {},
         model: 'chirp_3',
         languageCodes: ['yo-NG', 'en-NG'],
       },
-      audio: {
-        content: base64Audio,
-      },
+      content: audioContent,
     });
 
     // Extract transcript from response
