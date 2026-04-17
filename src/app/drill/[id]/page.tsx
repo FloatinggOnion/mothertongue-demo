@@ -64,7 +64,6 @@ export default function DrillPage() {
   const [drillEnded, setDrillEnded] = useState(false);
   const [textInput, setTextInput] = useState('');
   const [useTextMode, setUseTextMode] = useState(false);
-  const [lastActivityTime, setLastActivityTime] = useState(Date.now());
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
 
   // Refs
@@ -110,46 +109,6 @@ export default function DrillPage() {
     }
   }, [messages]);
 
-  useEffect(() => {
-    if (drillEnded || showSuggestions) return;
-
-    const interval = setInterval(() => {
-    const now = Date.now();
-    const idleTime = now - lastActivityTime;
-
-    const isIdle =
-      !isListening &&
-      !isSpeaking &&
-      !isLoading &&
-      messages.length > 0;
-
-    if (isIdle && idleTime >= 8000) {
-      fetchSuggestions();
-    }
-  }, 1000);
-
-  return () => clearInterval(interval);
-  }, [
-  lastActivityTime,
-  isListening,
-  isSpeaking,
-  isLoading,
-  messages,
-  drillEnded,
-  showSuggestions,
-]);
-
-  useEffect(() => {
-    if (isListening || isSpeaking || isLoading) {
-    setLastActivityTime(Date.now());
-  }
-  }, [isListening, isSpeaking, isLoading]);
-
-  useEffect(() => {
-    if (messages.length > 0) {
-    setLastActivityTime(Date.now());
-    }
-  }, [messages]);
 
   // Persist session to localStorage on meaningful state changes
   useEffect(() => {
