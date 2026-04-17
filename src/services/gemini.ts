@@ -132,11 +132,17 @@ export async function callGemini(options: {
 
   // Gemini failed — try OpenRouter fallback
   if (OPENROUTER_API_KEY) {
+    console.log('[OpenRouter] Gemini failed, trying fallback with model:', OPENROUTER_MODEL);
     try {
-      return await callOpenRouter(options);
+      const result = await callOpenRouter(options);
+      console.log('[OpenRouter] Fallback succeeded');
+      return result;
     } catch (fallbackError) {
+      console.error('[OpenRouter] Fallback also failed:', fallbackError);
       logError('/api/openrouter-fallback', fallbackError, {});
     }
+  } else {
+    console.warn('[OpenRouter] No OPENROUTER_API_KEY set — cannot fall back');
   }
 
   throw lastError;
