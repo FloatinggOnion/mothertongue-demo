@@ -30,9 +30,7 @@ export async function POST(request: NextRequest) {
     const [response] = await client.synthesizeSpeech({
       input: { text },
       voice: {
-        languageCode: 'yo-NG',
-        name: 'yo-NG-Standard-A', // only available Yoruba voice in Google Cloud TTS
-        ssmlGender: 'FEMALE',
+        languageCode: 'yo-NG'
       },
       audioConfig: {
         audioEncoding: 'MP3',
