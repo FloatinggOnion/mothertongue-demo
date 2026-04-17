@@ -47,12 +47,21 @@ export interface DrillSession {
   id: string;
   scenarioId: string;
   proficiencyLevel: ProficiencyLevel;
+  startingLevel?: ProficiencyLevel;
+  manualOverride?: boolean;
+  turnScores?: number[];
   messages: Message[];
   metrics: ConversationMetrics;
   evaluation?: Evaluation;
   startTime: number;
   endTime?: number;
   isActive: boolean;
+}
+
+export interface ProficiencyAssessment {
+  recommendedLevel: ProficiencyLevel;
+  rationale: string;
+  confidence: 'low' | 'high';
 }
 
 export interface ReplySuggestion {

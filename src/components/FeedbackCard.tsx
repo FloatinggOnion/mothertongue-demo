@@ -1,12 +1,20 @@
 'use client';
 
-import { Evaluation, ConversationMetrics } from '@/types';
+import { Evaluation, ConversationMetrics, ProficiencyLevel } from '@/types';
+
+const LEVEL_LABELS: Record<ProficiencyLevel, string> = {
+  beginner: 'Beginner',
+  intermediate: 'Intermediate',
+  advanced: 'Advanced',
+};
 
 type FeedbackCardProps =
   | {
       state: 'success';
       evaluation: Evaluation;
       metrics: ConversationMetrics;
+      proficiencyLevel?: ProficiencyLevel;
+      startingLevel?: ProficiencyLevel;
       onClose: () => void;
       onTryAgain: () => void;
     }
@@ -27,6 +35,8 @@ export function FeedbackCard(props: FeedbackCardProps) {
 function SuccessState({
   evaluation,
   metrics,
+  proficiencyLevel,
+  startingLevel,
   onClose,
   onTryAgain,
 }: Extract<FeedbackCardProps, { state: 'success' }>) {
@@ -36,58 +46,73 @@ function SuccessState({
     return mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
   };
 
+  const scoreLabel =
+    evaluation.overallScore >= 9
+      ? 'Native-like — outstanding'
+      : evaluation.overallScore >= 7
+      ? 'Strong — minor polish left'
+      : evaluation.overallScore >= 5
+      ? 'Communicating well — keep going'
+      : evaluation.overallScore >= 3
+      ? 'Building the foundation — stay with it'
+      : 'Early stage — every turn counts';
+
+  const levelChanged = startingLevel && proficiencyLevel && startingLevel !== proficiencyLevel;
+  const leveledUp = levelChanged && (
+    (startingLevel === 'beginner' && proficiencyLevel !== 'beginner') ||
+    (startingLevel === 'intermediate' && proficiencyLevel === 'advanced')
+  );
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl max-w-lg w-full p-6 md:p-8 border border-white/10 shadow-2xl">
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in overflow-y-auto">
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl max-w-lg w-full p-6 md:p-8 border border-white/10 shadow-2xl my-4">
         {/* Header */}
         <div className="text-center mb-6">
           <div className="text-4xl mb-2">🎉</div>
           <h2 className="text-2xl font-bold text-white mb-1">Drill Complete!</h2>
-          <p className="text-slate-400 text-sm">
-            Here&apos;s how you did in this conversation
-          </p>
+          <p className="text-slate-400 text-sm">Here&apos;s how you did</p>
+          {proficiencyLevel && (
+            <div className="flex items-center justify-center gap-2 mt-2">
+              <span className="text-xs text-slate-500">Finished at</span>
+              <span className="text-xs font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
+                {LEVEL_LABELS[proficiencyLevel]}
+              </span>
+              {levelChanged && (
+                <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                  leveledUp
+                    ? 'text-amber-400 bg-amber-500/10 border border-amber-500/20'
+                    : 'text-sky-400 bg-sky-500/10 border border-sky-500/20'
+                }`}>
+                  {leveledUp ? '↑ leveled up' : '↓ adjusted'}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Metrics Row */}
-        <div className="grid grid-cols-3 gap-3 mb-6">
+        {/* Hero score */}
+        <div className="flex flex-col items-center mb-5">
+          <div className="text-5xl font-bold text-white">{evaluation.overallScore}<span className="text-2xl text-slate-500">/10</span></div>
+          <p className="text-xs text-slate-400 mt-1">{scoreLabel}</p>
+        </div>
+
+        {/* Sub-scores */}
+        <div className="mb-5 space-y-2">
+          <ScoreBar label="Fluency" score={evaluation.fluencyScore} color="emerald" />
+          <ScoreBar label="Grammar" score={evaluation.grammarScore} color="teal" />
+          <ScoreBar label="Confidence" score={evaluation.confidenceScore} color="cyan" />
+        </div>
+
+        {/* Session stats */}
+        <div className="grid grid-cols-2 gap-3 mb-6">
           <div className="bg-white/5 rounded-xl p-3 text-center">
-            <div className="text-2xl font-bold text-emerald-400">
-              {formatTime(metrics.speakingTimeSeconds)}
-            </div>
+            <div className="text-xl font-bold text-emerald-400">{formatTime(metrics.speakingTimeSeconds)}</div>
             <div className="text-xs text-slate-400">Speaking Time</div>
           </div>
           <div className="bg-white/5 rounded-xl p-3 text-center">
-            <div className="text-2xl font-bold text-teal-400">
-              {metrics.turnCount}
-            </div>
+            <div className="text-xl font-bold text-teal-400">{metrics.turnCount}</div>
             <div className="text-xs text-slate-400">Turns</div>
           </div>
-          <div className="bg-white/5 rounded-xl p-3 text-center">
-            <div className="text-2xl font-bold text-cyan-400">
-              {evaluation.overallScore}/10
-            </div>
-
-            <div className="text-xs text-slate-400">Score</div>
-
-            <div className="mt-1 text-[10px] text-slate-400 leading-tight">
-              {evaluation.overallScore >= 8
-                ? 'Excellent performance'
-                : evaluation.overallScore >= 6
-                ? 'Good, but room to improve'
-                : 'Keep practicing — you’re improving'}
-            </div>
-          </div>
-        </div>
-
-        {/* Score Breakdown */}
-        <div className="mb-6 space-y-2">
-          <ScoreBar label="Fluency" score={evaluation.fluencyScore} color="emerald" />
-          <ScoreBar label="Grammar" score={evaluation.grammarScore} color="teal" />
-          <ScoreBar
-            label="Confidence"
-            score={evaluation.confidenceScore}
-            color="cyan"
-          />
         </div>
 
         {/* Feedback */}
@@ -161,7 +186,7 @@ function SuccessState({
 }
 
 function ErrorState({
-  errorMessage,
+  errorMessage: _errorMessage,
   onRetry,
   onClose,
 }: Extract<FeedbackCardProps, { state: 'error' }>) {
@@ -187,16 +212,16 @@ function ErrorState({
         {/* Actions */}
         <div className="flex gap-3">
           <button
-            onClick={onClose}
-            className="flex-1 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors"
-          >
-            Back to Scenarios
-          </button>
-          <button
             onClick={onRetry}
             className="flex-1 py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-white font-medium transition-colors"
           >
             Retry evaluation
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 py-3 px-4 rounded-xl bg-white/10 hover:bg-white/20 text-white font-medium transition-colors"
+          >
+            Skip &amp; go home
           </button>
         </div>
       </div>

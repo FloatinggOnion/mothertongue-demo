@@ -60,7 +60,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Return audio as MP3
-    return new NextResponse(audioContent as Buffer, {
+    return new NextResponse(new Uint8Array(audioContent as Buffer), {
       headers: {
         'Content-Type': 'audio/mpeg',
         'Content-Length': audioContent.length.toString(),

@@ -49,8 +49,9 @@ export function MessageBubble({
 interface ConversationViewProps {
   messages: Message[];
   isLoading?: boolean;
-  isListening?: boolean;   // NEW
-  isSpeaking?: boolean;    // NEW
+  isListening?: boolean;
+  isSpeaking?: boolean;
+  scenario?: { context: string; aiRole: string; icon: string };
 }
 
 export function ConversationView({
@@ -58,21 +59,26 @@ export function ConversationView({
   isLoading = false,
   isListening = false,
   isSpeaking = false,
+  scenario,
 }: ConversationViewProps) {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-8 space-y-4">
-  {/* --- CENTERED EMPTY STATE --- */}
-        {messages.length === 0 && !isLoading && (
-          <div className="flex flex-col items-center justify-center py-20 opacity-50 text-center animate-in fade-in zoom-in-95 duration-1000">
-            <div className="bg-emerald-500/10 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20">
-              <span className="text-4xl">🎤</span>
-            </div>
-            <h3 className="text-white font-semibold text-xl tracking-tight">Ready for your Drill?</h3>
-            <p className="text-slate-400 text-sm max-w-[280px] mx-auto mt-3 leading-relaxed">
-              The AI is preparing your scenario. Listen for the greeting or start speaking in Yoruba.
-            </p>
+      {messages.length === 0 && !isLoading && (
+        <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in-95 duration-1000">
+          <div className="bg-emerald-500/10 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20">
+            <span className="text-4xl">{scenario?.icon ?? '🎤'}</span>
           </div>
-        )}
+          <h3 className="text-white font-semibold text-xl tracking-tight">Ready to practise?</h3>
+          {scenario && (
+            <p className="text-slate-400 text-sm max-w-[280px] mx-auto mt-2 leading-relaxed">
+              {scenario.context} — you&apos;re speaking with <span className="text-emerald-400">{scenario.aiRole}</span>.
+            </p>
+          )}
+          <p className="text-slate-500 text-xs mt-4">
+            Hold the mic to speak · or tap <span className="text-slate-400">Text</span> to type
+          </p>
+        </div>
+      )}
 
   {messages.map((message) => (
     <MessageBubble key={message.id} message={message} />

@@ -8,6 +8,7 @@ import {
   GeminiResponse,
   Evaluation,
   ReplySuggestion,
+  ProficiencyAssessment,
 } from '@/types';
 import { logError } from '@/lib/logger';
 
@@ -293,6 +294,57 @@ export async function evaluateConversation(
 
   const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
   return JSON.parse(cleaned);
+}
+
+export async function assessProficiency(
+  conversationHistory: Message[],
+  currentLevel: ProficiencyLevel
+): Promise<ProficiencyAssessment> {
+  const recent = conversationHistory.slice(-6);
+  const userMessages = recent.filter((m) => m.role === 'user');
+
+  if (userMessages.length < 2) {
+    return { recommendedLevel: currentLevel, rationale: 'Not enough data yet', confidence: 'low' };
+  }
+
+  const conversationText = recent
+    .map((m) => `${m.role === 'user' ? 'LEARNER' : 'AI'}: ${m.content}`)
+    .join('\n');
+
+  try {
+    const text = await callGemini({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            {
+              text: `You are assessing a Yoruba language learner's proficiency. Current level: ${currentLevel}.
+
+Analyze these recent exchanges and recommend a level adjustment only if clearly warranted.
+
+${conversationText}
+
+Return JSON only (no markdown):
+{
+  "recommendedLevel": "beginner" | "intermediate" | "advanced",
+  "rationale": "one concise sentence",
+  "confidence": "low" | "high"
+}
+
+Set confidence "high" only when the evidence clearly supports a change. Otherwise return the current level with confidence "low".`,
+            },
+          ],
+        },
+      ],
+      temperature: 0.2,
+      maxOutputTokens: 150,
+    });
+
+    const cleaned = text.replace(/```json\n?|\n?```/g, '').trim();
+    return JSON.parse(cleaned) as ProficiencyAssessment;
+  } catch {
+    return { recommendedLevel: currentLevel, rationale: 'Assessment unavailable', confidence: 'low' };
+  }
 }
 
 export async function translateText(

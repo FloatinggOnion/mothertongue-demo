@@ -9,6 +9,9 @@ import {
   MicButton,
   ReplySuggestions,
   FeedbackCard,
+  LevelBadge,
+  LevelAdjustBanner,
+  StatusStrip,
 } from '@/components';
 import { useSpeechRecognition, useSpeechSynthesis } from '@/hooks/useSpeech';
 import {
@@ -17,7 +20,9 @@ import {
   Evaluation,
   ConversationMetrics,
   ReplySuggestion,
+  ProficiencyAssessment,
 } from '@/types';
+import { loadSession, saveSession, clearSession } from '@/lib/session-store';
 
 export default function DrillPage() {
   const params = useParams();
@@ -26,12 +31,31 @@ export default function DrillPage() {
   const scenario = getScenarioById(scenarioId);
 
   // State
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<Message[]>(() => {
+    if (typeof window === 'undefined') return [];
+    return loadSession(scenarioId)?.messages ?? [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
-  const [proficiencyLevel] = useState<ProficiencyLevel>('beginner');
+  const [proficiencyLevel, setProficiencyLevel] = useState<ProficiencyLevel>(() => {
+    if (typeof window === 'undefined') return scenario?.difficulty ?? 'beginner';
+    return loadSession(scenarioId)?.proficiencyLevel ?? scenario?.difficulty ?? 'beginner';
+  });
+  const [manualOverride, setManualOverride] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return loadSession(scenarioId)?.manualOverride ?? false;
+  });
+  const [startingLevel] = useState<ProficiencyLevel>(() => {
+    if (typeof window === 'undefined') return scenario?.difficulty ?? 'beginner';
+    return loadSession(scenarioId)?.startingLevel ?? scenario?.difficulty ?? 'beginner';
+  });
+  const [levelSuggestion, setLevelSuggestion] = useState<{ to: ProficiencyLevel; rationale: string } | null>(null);
+  const [lastAssessedTurnCount, setLastAssessedTurnCount] = useState(0);
   const [speakingStartTime, setSpeakingStartTime] = useState<number | null>(null);
-  const [totalSpeakingTime, setTotalSpeakingTime] = useState(0);
+  const [totalSpeakingTime, setTotalSpeakingTime] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    return loadSession(scenarioId)?.totalSpeakingTime ?? 0;
+  });
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState<ReplySuggestion[]>([]);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
@@ -127,6 +151,20 @@ export default function DrillPage() {
     }
   }, [messages]);
 
+  // Persist session to localStorage on meaningful state changes
+  useEffect(() => {
+    if (drillEnded || messages.length === 0) return;
+    saveSession(scenarioId, {
+      messages,
+      proficiencyLevel,
+      manualOverride,
+      turnScores: [],
+      totalSpeakingTime,
+      startingLevel,
+      startedAt: Date.now(),
+    });
+  }, [messages, proficiencyLevel, manualOverride, totalSpeakingTime, drillEnded, scenarioId, startingLevel]);
+
   const fetchSuggestions = async () => {
   if (
     !scenario ||
@@ -206,6 +244,27 @@ export default function DrillPage() {
         };
         setMessages((prev) => [...prev, aiMessage]);
         speak(data.reply, scenario.gender);
+
+        // Adaptive difficulty: assess every 4 user turns
+        const userTurnCount = messages.filter((m) => m.role === 'user').length + 1;
+        if (!manualOverride && userTurnCount % 4 === 0 && userTurnCount > lastAssessedTurnCount) {
+          setLastAssessedTurnCount(userTurnCount);
+          fetch('/api/assess-level', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              proficiencyLevel,
+              conversationHistory: [...messages, userMessage],
+            }),
+          })
+            .then((r) => r.json())
+            .then((assessment: ProficiencyAssessment) => {
+              if (assessment.recommendedLevel !== proficiencyLevel && assessment.confidence === 'high') {
+                setLevelSuggestion({ to: assessment.recommendedLevel, rationale: assessment.rationale });
+              }
+            })
+            .catch(() => {});
+        }
       } else if (data.error) {
         console.error('API error:', data.error);
       }
@@ -293,6 +352,7 @@ export default function DrillPage() {
 
   const handleEndDrill = async () => {
     setDrillEnded(true);
+    clearSession(scenarioId);
     await fetchEvaluation();
   };
 
@@ -349,7 +409,19 @@ export default function DrillPage() {
               <span className="text-xl">{scenario.icon}</span>
               <h1 className="text-white font-semibold">{scenario.title}</h1>
             </div>
-            <p className="text-xs text-emerald-400">{scenario.aiRole}</p>
+            <div className="flex items-center justify-center gap-2 mt-1">
+              <p className="text-xs text-emerald-400">{scenario.aiRole}</p>
+              <LevelBadge
+                level={proficiencyLevel}
+                manualOverride={manualOverride}
+                onLevelChange={(l) => {
+                  setProficiencyLevel(l);
+                  setManualOverride(true);
+                  setLevelSuggestion(null);
+                }}
+                onClearOverride={() => setManualOverride(false)}
+              />
+            </div>
           </div>
 
           <button
@@ -367,37 +439,23 @@ export default function DrillPage() {
         ref={conversationRef}
         className="flex-1 overflow-y-auto max-w-2xl mx-auto w-full"
       >
-        <ConversationView messages={messages} isLoading={isLoading} />
+        <ConversationView
+          messages={messages}
+          isLoading={isLoading}
+          isListening={isListening}
+          isSpeaking={isSpeaking}
+          scenario={scenario}
+        />
 
-        {isLoading && (
-          <div className="px-6 py-2 flex items-center gap-3 animate-pulse">
-            <div className="flex gap-1">
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce" />
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce [animation-delay:-.3s]" />
-              <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-bounce [animation-delay:-.5s]" />
-          </div>
-          <span className="text-xs text-emerald-400/80 italic font-medium">
-            {messages.length <= 1 
-              ? "AI is waking up (this takes ~30s the first time)..." 
-              : "Generating Yoruba audio..."}
-          </span>
-        </div>
-        )}
-
-        {isSpeaking && (
-          <div className="px-6 py-1 flex items-center gap-2">
-            <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-ping" />
-            <span className="text-[10px] text-slate-400 uppercase tracking-widest font-semibold">
-              {usingFallback ? "Local Voice Active" : "AI Voice Streaming"}
-            </span>
-            <button 
-              onClick={stop}
-              className="ml-2 text-[10px] text-red-400/70 hover:text-red-400 underline decoration-dotted"
-            >
-              Stop Audio
-            </button>
-          </div>
-      )}
+        <StatusStrip
+          isListening={isListening}
+          isLoading={isLoading}
+          isSpeaking={isSpeaking}
+          isEvaluating={isEvaluating}
+          usingFallback={usingFallback}
+          isFirstMessage={messages.length <= 1}
+          onStop={stop}
+        />
 
         {/* Live transcript */}
         {(transcript || interimTranscript) && (
@@ -412,6 +470,21 @@ export default function DrillPage() {
           </div>
         )}
       </div>
+
+      {/* Level adjustment suggestion */}
+      {levelSuggestion && !drillEnded && !isListening && !isSpeaking && (
+        <LevelAdjustBanner
+          from={proficiencyLevel}
+          to={levelSuggestion.to}
+          rationale={levelSuggestion.rationale}
+          onAccept={() => {
+            setProficiencyLevel(levelSuggestion.to);
+            setManualOverride(true);
+            setLevelSuggestion(null);
+          }}
+          onDismiss={() => setLevelSuggestion(null)}
+        />
+      )}
 
       {/* Suggestions Tray & Manual Trigger */}
       <div className="flex flex-col items-center mb-2">
@@ -527,14 +600,19 @@ export default function DrillPage() {
                 state: 'success' as const,
                 evaluation: evaluation!,
                 metrics: metrics,
+                proficiencyLevel,
+                startingLevel,
                 onClose: () => router.push('/'),
                 onTryAgain: () => {
+                  clearSession(scenarioId);
                   setMessages([]);
                   setEvaluation(null);
                   setEvaluationError(null);
                   setShowFeedback(false);
                   setDrillEnded(false);
                   setTotalSpeakingTime(0);
+                  setLevelSuggestion(null);
+                  setLastAssessedTurnCount(0);
                 },
               })}
         />

@@ -33,11 +33,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Speech-to-Text v2 API request
-    const response = await speechClient.recognize({
+    // Speech-to-Text v2 API request (SDK types are v1; cast to bypass)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const response = await (speechClient.recognize as any)({
       recognizer: `projects/${projectId}/locations/global/recognizers/_`,
       config: {
-        autoDecoding: {},
+        autoDecodingConfig: {},
         model: 'chirp_3',
         languageCodes: ['yo-NG', 'en-NG'],
       },

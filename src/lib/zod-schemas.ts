@@ -37,11 +37,17 @@ export const TtsSchema = z.object({
   gender: z.enum(['male', 'female']).optional(),
 });
 
+export const AssessLevelSchema = z.object({
+  proficiencyLevel: ProficiencyLevelSchema,
+  conversationHistory: z.array(MessageSchema).min(1, 'conversationHistory must not be empty'),
+});
+
 // Type exports for runtime use
 export type ChatRequest = z.infer<typeof ChatSchema>;
 export type EvaluateRequest = z.infer<typeof EvaluateSchema>;
 export type SuggestionsRequest = z.infer<typeof SuggestionsSchema>;
 export type TtsRequest = z.infer<typeof TtsSchema>;
+export type AssessLevelRequest = z.infer<typeof AssessLevelSchema>;
 
 // Helper to extract field error message
 export function getZodErrorMessage(error: z.ZodError): string {
