@@ -30,7 +30,8 @@ export async function POST(request: NextRequest) {
       input: { text },
       voice: {
         languageCode: 'yo-NG',
-        ssmlGender: gender === 'male' ? 'MALE' : 'FEMALE'
+        name: 'yo-NG-Standard-A', // only available Yoruba voice in Google Cloud TTS
+        ssmlGender: 'FEMALE',
       },
       audioConfig: {
         audioEncoding: 'MP3',

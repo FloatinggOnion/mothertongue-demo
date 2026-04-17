@@ -17,6 +17,61 @@ const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 // Model to use - Gemini 3
 const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
+// OpenRouter fallback config
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'google/gemma-4-26b-a4b-it:free';
+
+function toOpenRouterMessages(
+  contents: any[],
+  systemInstruction?: string
+): { role: string; content: string }[] {
+  const messages: { role: string; content: string }[] = [];
+  if (systemInstruction) {
+    messages.push({ role: 'system', content: systemInstruction });
+  }
+  for (const msg of contents) {
+    const role = msg.role === 'model' ? 'assistant' : (msg.role ?? 'user');
+    const content = Array.isArray(msg.parts)
+      ? msg.parts.map((p: any) => p.text ?? '').join('')
+      : msg.content ?? '';
+    messages.push({ role, content });
+  }
+  return messages;
+}
+
+async function callOpenRouter(options: {
+  contents: any[];
+  systemInstruction?: string;
+  temperature?: number;
+  maxOutputTokens?: number;
+}): Promise<string> {
+  if (!OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY not configured');
+
+  const { contents, systemInstruction, temperature = 0.7, maxOutputTokens = 200 } = options;
+  const messages = toOpenRouterMessages(contents, systemInstruction);
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${OPENROUTER_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: OPENROUTER_MODEL,
+      messages,
+      temperature,
+      max_tokens: maxOutputTokens,
+    }),
+  });
+
+  if (!res.ok) {
+    throw new Error(`OpenRouter error: ${res.status}`);
+  }
+
+  const data = await res.json();
+  return data.choices?.[0]?.message?.content ?? '';
+}
+
 // Backoff windows per REQUIREMENTS.md (attempt N uses index N-1)
 const RETRY_WINDOWS_MS: [number, number][] = [
   [2000, 4000], // Attempt 1 retry: 2–4 seconds
@@ -59,14 +114,13 @@ export async function callGemini(options: {
     } catch (error: any) {
       lastError = error;
 
-      // If not retryable or this was the last attempt, log and throw
       if (!isRetryable(error) || attempt === 2) {
         logError('/api/gemini-call', error, {
           attempt: attempt + 1,
           isRetryable: isRetryable(error),
           status: error?.status ?? error?.statusCode,
         });
-        throw error;
+        break; // fall through to OpenRouter fallback
       }
 
       // Retryable error — wait with jittered backoff before next attempt
@@ -76,7 +130,15 @@ export async function callGemini(options: {
     }
   }
 
-  // Should never reach here, but throw lastError as fallback
+  // Gemini failed — try OpenRouter fallback
+  if (OPENROUTER_API_KEY) {
+    try {
+      return await callOpenRouter(options);
+    } catch (fallbackError) {
+      logError('/api/openrouter-fallback', fallbackError, {});
+    }
+  }
+
   throw lastError;
 }
 
