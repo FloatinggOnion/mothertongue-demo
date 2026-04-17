@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
     const [response] = await client.synthesizeSpeech({
       input: { text },
       voice: {
-        languageCode: 'en-NG',
+        languageCode: 'yo-NG',
         name: voiceName,
         ssmlGender: gender === 'male' ? 'MALE' : 'FEMALE'
       },
