@@ -1,7 +1,8 @@
 import fs from 'fs';
 import path from 'path';
 
-const LOG_PATH = path.join(process.cwd(), 'logs', 'errors.log');
+const LOG_DIR = process.env.VERCEL ? '/tmp/logs' : path.join(process.cwd(), 'logs');
+const LOG_PATH = path.join(LOG_DIR, 'errors.log');
 
 export function logError(
   endpoint: string,
