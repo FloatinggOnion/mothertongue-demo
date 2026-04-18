@@ -552,7 +552,7 @@ export default function DrillPage() {
           ) : (
             /* Voice input mode */
             <div className="flex justify-center">
-              {!sttSupported || sttError ? (
+              {!sttSupported || sttError === 'Microphone access denied' || sttError === 'Microphone unavailable' ? (
                 <div className="text-center">
                   <p className="text-amber-400 text-sm mb-2">
                     {sttError || 'Speech recognition not available'}
@@ -565,13 +565,18 @@ export default function DrillPage() {
                   </button>
                 </div>
               ) : (
-                <MicButton
-                  isListening={isListening}
-                  isSpeaking={isSpeaking}
-                  isLoading={isLoading}
-                  onPress={handleMicPress}
-                  onRelease={handleMicRelease}
-                />
+                <div className="flex flex-col items-center gap-2">
+                  {sttError && (
+                    <p className="text-amber-400 text-xs">Transcription failed — tap and try again</p>
+                  )}
+                  <MicButton
+                    isListening={isListening}
+                    isSpeaking={isSpeaking}
+                    isLoading={isLoading}
+                    onPress={handleMicPress}
+                    onRelease={handleMicRelease}
+                  />
+                </div>
               )}
             </div>
           )}
