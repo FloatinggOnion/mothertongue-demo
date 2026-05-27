@@ -24,6 +24,8 @@ import {
 } from '@/types';
 import { loadSession, saveSession, clearSession } from '@/lib/session-store';
 
+/* Hallmark · genre: editorial · macrostructure: Editorial Split · design-system: design.md */
+
 export default function DrillPage() {
   const params = useParams();
   const router = useRouter();
@@ -31,10 +33,7 @@ export default function DrillPage() {
   const scenario = getScenarioById(scenarioId);
 
   // State
-  const [messages, setMessages] = useState<Message[]>(() => {
-    if (typeof window === 'undefined') return [];
-    return loadSession(scenarioId)?.messages ?? [];
-  });
+  const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [proficiencyLevel, setProficiencyLevel] = useState<ProficiencyLevel>(() => {
@@ -90,11 +89,12 @@ export default function DrillPage() {
 
   const { speak, stop, isSpeaking, usingFallback, error: ttsError } = useSpeechSynthesis();
 
+  useEffect(() => {
+  const saved = loadSession(scenarioId)?.messages;
+  if (saved) setMessages(saved);
+}, [scenarioId]);
+
   // Watch interimTranscript to detect when STT server-side transcription completes.
-  // The STT hook sets interimTranscript to 'Processing audio...' while the fetch is
-  // in-flight, then clears it to '' in the finally block. When we see it go back to ''
-  // while processingStartedRef is true, transcription is done and transcript state is
-  // settled — resolve the pending promise so handleMicRelease can proceed.
   useEffect(() => {
     if (interimTranscript === 'Processing audio...') {
       processingStartedRef.current = true;
@@ -148,44 +148,44 @@ export default function DrillPage() {
   }, [messages, proficiencyLevel, manualOverride, totalSpeakingTime, drillEnded, scenarioId, startingLevel]);
 
   const fetchSuggestions = async () => {
-  if (
-    !scenario ||
-    messages.length === 0 ||
-    isListening ||
-    isSpeaking ||
-    isFetchingSuggestions
-  ) return;
+    if (
+      !scenario ||
+      messages.length === 0 ||
+      isListening ||
+      isSpeaking ||
+      isFetchingSuggestions
+    ) return;
 
-  const lastAiMessage = [...messages].reverse().find((m) => m.role === 'ai');
-  if (!lastAiMessage) return;
+    const lastAiMessage = [...messages].reverse().find((m) => m.role === 'ai');
+    if (!lastAiMessage) return;
 
-  try {
-    setIsFetchingSuggestions(true);
+    try {
+      setIsFetchingSuggestions(true);
 
-    const response = await fetch('/api/suggestions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        scenarioId: scenario.id,
-        proficiencyLevel,
-        conversationHistory: messages,
-        lastAiMessage: lastAiMessage.content,
-      }),
-    });
+      const response = await fetch('/api/suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenarioId: scenario.id,
+          proficiencyLevel,
+          conversationHistory: messages,
+          lastAiMessage: lastAiMessage.content,
+        }),
+      });
 
-    const data = await response.json();
+      const data = await response.json();
 
-    // Prevent flash if user suddenly starts talking
-    if (!isListening && !isSpeaking && data.suggestions) {
-      setSuggestions(data.suggestions);
-      setShowSuggestions(true);
+      // Prevent flash if user suddenly starts talking
+      if (!isListening && !isSpeaking && data.suggestions) {
+        setSuggestions(data.suggestions);
+        setShowSuggestions(true);
+      }
+    } catch (error) {
+      console.error('Failed to fetch suggestions:', error);
+    } finally {
+      setIsFetchingSuggestions(false);
     }
-  } catch (error) {
-    console.error('Failed to fetch suggestions:', error);
-  } finally {
-    setIsFetchingSuggestions(false);
-  }
-};
+  };
 
   // Send message to AI
   const sendMessage = async (userText: string) => {
@@ -245,7 +245,7 @@ export default function DrillPage() {
                 setLevelSuggestion({ to: assessment.recommendedLevel, rationale: assessment.rationale });
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         }
       } else if (data.error) {
         console.error('API error:', data.error);
@@ -273,15 +273,9 @@ export default function DrillPage() {
       setSpeakingStartTime(null);
     }
 
-    // Wait for the STT hook to finish its server-side transcription fetch.
-    // The hook sets interimTranscript to 'Processing audio...' while the fetch is
-    // in-flight, then clears it back to '' when done. A useEffect above watches for
-    // that transition and resolves this Promise with the final transcript text.
-    // We also set a 10s safety timeout so we never hang forever.
     const userText = await new Promise<string>((resolve) => {
       transcriptReadyResolveRef.current = resolve;
-      // Safety timeout: if STT hook never emits the ready signal (e.g. no audio
-      // was recorded and onstop never fired), resolve with empty string after 10s.
+      // Safety timeout
       setTimeout(() => {
         if (transcriptReadyResolveRef.current === resolve) {
           transcriptReadyResolveRef.current = null;
@@ -307,8 +301,8 @@ export default function DrillPage() {
   };
 
   const handleSuggestionSelect = async (text: string) => {
-    setShowSuggestions(false); // Immediate Action: Close the tray
-    await sendMessage(text);   // Execute the send
+    setShowSuggestions(false);
+    await sendMessage(text);
   };
 
   const fetchEvaluation = async () => {
@@ -361,12 +355,12 @@ export default function DrillPage() {
 
   if (!scenario) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 flex items-center justify-center">
-        <div className="text-white text-center">
-          <p className="text-xl mb-4">Scenario not found</p>
+      <div className="min-h-screen bg-paper flex items-center justify-center selection:bg-accent/30">
+        <div className="text-dark text-center">
+          <p className="font-display text-xl mb-4">Scenario not found</p>
           <button
             onClick={() => router.push('/')}
-            className="text-emerald-400 hover:underline"
+            className="font-ui text-sm text-accent hover:underline"
           >
             ← Back to scenarios
           </button>
@@ -376,227 +370,264 @@ export default function DrillPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-40 bg-slate-950/80 backdrop-blur-lg border-b border-white/10 px-4 py-3">
-        <div className="max-w-2xl mx-auto flex items-center justify-between">
-          <button
-            onClick={() => router.push('/')}
-            className="text-slate-400 hover:text-white transition-colors"
-          >
-            <svg
-              className="w-6 h-6"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M15 19l-7-7 7-7"
-              />
-            </svg>
-          </button>
+    <main className="relative min-h-screen bg-paper flex flex-col md:flex-row selection:bg-accent/30">
+      <img src="/native.jpg" alt="" aria-hidden="true" className="fixed top-[-5%] right-[-5%] w-[400px] opacity-[0.08] rotate-[15deg] pointer-events-none z-0" />
+      <img src="/native.jpg" alt="" aria-hidden="true" className="fixed bottom-[10%] left-[-10%] w-[350px] opacity-[0.06] rotate-[-10deg] pointer-events-none z-0" />
 
-          <div className="text-center">
-            <div className="flex items-center gap-2 justify-center">
-              <span className="text-xl">{scenario.icon}</span>
-              <h1 className="text-white font-semibold">{scenario.title}</h1>
-            </div>
-            <div className="flex items-center justify-center gap-2 mt-1">
-              <p className="text-xs text-emerald-400">{scenario.aiRole}</p>
-              <LevelBadge
-                level={proficiencyLevel}
-                manualOverride={manualOverride}
-                onLevelChange={(l) => {
-                  setProficiencyLevel(l);
-                  setManualOverride(true);
-                  setLevelSuggestion(null);
-                }}
-                onClearOverride={() => setManualOverride(false)}
-              />
-            </div>
-          </div>
+      {/* Decorative Motif Layer */}
+      <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden z-0" aria-hidden="true">
+        <svg width="100%" height="100%">
+          <pattern id="drill-motif" x="0" y="0" width="400" height="400" patternUnits="userSpaceOnUse">
+            <circle cx="200" cy="200" r="180" fill="none" stroke="currentColor" strokeWidth="1" className="text-dark" />
+            <path d="M200 20L200 380 M20 200L380 200" stroke="currentColor" strokeWidth="0.5" className="text-dark" />
+          </pattern>
+          <rect width="100%" height="100%" fill="url(#drill-motif)" />
+        </svg>
+        {/* Floating Rosettes */}
+        <img src="/native.jpg" alt="" aria-hidden="true" className="absolute top-1/3 right-1/4 w-[300px] opacity-[0.02] rotate-[45deg]" />
+      </div>
 
-          <button
-            onClick={handleEndDrill}
-            disabled={messages.length < 2 || drillEnded}
-            className="text-sm px-3 py-1 rounded-lg bg-white/10 text-white hover:bg-white/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            End Drill
-          </button>
+      {/* Left Rail (Desktop) */}
+      <aside className="hidden md:flex w-[120px] lg:w-[140px] flex-col items-center py-12 border-r border-divider sticky top-0 h-screen shrink-0 z-20 bg-paper/50 backdrop-blur-sm">
+        <button
+          onClick={() => router.push('/')}
+          className="group mb-12 hover:translate-x-[-2px] transition-transform duration-base"
+        >
+          <svg className="w-6 h-6 text-text-secondary group-hover:text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        <div className="flex flex-col items-center gap-4 text-center px-4">
+          <span className="font-display text-xl tracking-tight text-dark leading-tight">{scenario.title}</span>
+          <div className="h-px w-8 bg-divider" />
+          <span className="font-ui text-[9px] uppercase tracking-[0.2em] text-text-secondary leading-tight">{scenario.aiRole}</span>
         </div>
-      </header>
 
-      {/* Conversation */}
-      <div
-        ref={conversationRef}
-        className="flex-1 overflow-y-auto max-w-2xl mx-auto w-full"
-      >
-        <ConversationView
-          messages={messages}
-          isLoading={isLoading}
-          isListening={isListening}
-          isSpeaking={isSpeaking}
-          scenario={scenario}
-        />
+        <div className="mt-auto">
+          <div className="w-8 h-8 rounded-full bg-accent animate-pulse-ring" />
+        </div>
+      </aside>
 
-        <StatusStrip
-          isListening={isListening}
-          isLoading={isLoading}
-          isSpeaking={isSpeaking}
-          isEvaluating={isEvaluating}
-          usingFallback={usingFallback}
-          isFirstMessage={messages.length <= 1}
-          onStop={stop}
-        />
+      {/* Main Content Area */}
+      <div className="flex-grow flex flex-col min-w-0 relative z-10">
 
-        {/* Live transcript */}
-        {(transcript || interimTranscript) && (
-          <div className="px-4 mb-4">
-            <div className="bg-emerald-500/20 border border-emerald-500/30 rounded-xl px-4 py-2 text-white text-sm">
-              <span className="text-emerald-400 text-xs block mb-1">
-                You&apos;re saying:
-              </span>
-              {transcript}
-              <span className="text-emerald-300/60">{interimTranscript}</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Level adjustment suggestion */}
-      {levelSuggestion && !drillEnded && !isListening && !isSpeaking && (
-        <LevelAdjustBanner
-          from={proficiencyLevel}
-          to={levelSuggestion.to}
-          rationale={levelSuggestion.rationale}
-          onAccept={() => {
-            setProficiencyLevel(levelSuggestion.to);
-            setManualOverride(true);
-            setLevelSuggestion(null);
-          }}
-          onDismiss={() => setLevelSuggestion(null)}
-        />
-      )}
-
-      {/* Suggestions Tray & Manual Trigger */}
-      <div className="flex flex-col items-center mb-2">
-        {!showSuggestions && !isListening && !isSpeaking && !isLoading && !drillEnded && (
-          <button
-            onClick={fetchSuggestions}
-            disabled={isFetchingSuggestions}
-            className="text-[10px] uppercase tracking-wider bg-white/5 border border-white/10 hover:bg-white/10 text-emerald-400 px-3 py-1 rounded-full transition-all flex items-center gap-2 mb-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <span className="animate-pulse">💡</span>
-            {isFetchingSuggestions ? 'Loading...' : 'Need help replying?'}
-          </button>
-        )}
-        
-        <ReplySuggestions
-          suggestions={suggestions}
-          onSelect={handleSuggestionSelect}
-          isVisible={showSuggestions && !drillEnded && !isListening && !isSpeaking}
-        />
-      </div>
-
-      {/* Input Area */}
-      <div className="sticky bottom-0 bg-gradient-to-t from-slate-950 via-slate-950/95 to-transparent pt-6 pb-6">
-        <div className="max-w-2xl mx-auto px-4">
-          {/* Mode toggle */}
-          <div className="flex justify-center mb-4">
-            <div className="inline-flex bg-white/5 rounded-lg p-1">
+        {/* Header */}
+        <header className="sticky top-0 z-30 bg-paper/80 backdrop-blur-lg border-b border-divider px-6 py-4">
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-4">
               <button
-                onClick={() => setUseTextMode(false)}
-                className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-                  !useTextMode
-                    ? 'bg-emerald-500 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
+                onClick={() => router.push('/')}
+                className="md:hidden text-text-secondary hover:text-dark transition-colors"
               >
-                🎙️ Voice
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
               </button>
-              <button
-                onClick={() => setUseTextMode(true)}
-                className={`px-4 py-1.5 text-sm rounded-md transition-colors ${
-                  useTextMode
-                    ? 'bg-emerald-500 text-white'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                ⌨️ Text
-              </button>
-            </div>
-          </div>
 
-          {useTextMode ? (
-            /* Text input mode */
-            <form onSubmit={handleTextSubmit} className="flex gap-2">
-              <input
-                type="text"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                placeholder="Type your response in Yoruba or English..."
-                disabled={isLoading || drillEnded}
-                className="flex-1 bg-white/10 border border-white/20 rounded-xl px-4 py-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500/50 disabled:opacity-50"
-              />
-              <button
-                type="submit"
-                disabled={!textInput.trim() || isLoading || drillEnded}
-                className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white rounded-xl font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isLoading ? '...' : 'Send'}
-              </button>
-            </form>
-          ) : (
-            /* Voice input mode */
-            <div className="flex justify-center">
-              {!sttSupported || sttError === 'Microphone access denied' || sttError === 'Microphone unavailable' ? (
-                <div className="text-center">
-                  <p className="text-amber-400 text-sm mb-2">
-                    {sttError || 'Speech recognition not available'}
-                  </p>
-                  <button
-                    onClick={() => setUseTextMode(true)}
-                    className="text-emerald-400 text-sm hover:underline"
-                  >
-                    Switch to text input →
-                  </button>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="hidden md:block text-lg">{scenario.icon}</span>
+                  <h1 className="font-display text-lg text-text leading-none md:hidden">{scenario.title}</h1>
+                  <span className="font-ui text-label text-accent uppercase tracking-widest hidden md:block">Session in Progress</span>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center gap-2">
-                  {sttError && (
-                    <p className="text-amber-400 text-xs">Transcription failed — tap and try again</p>
-                  )}
-                  <MicButton
-                    isListening={isListening}
-                    isSpeaking={isSpeaking}
-                    isLoading={isLoading}
-                    onPress={handleMicPress}
-                    onRelease={handleMicRelease}
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="md:hidden font-ui text-[10px] uppercase tracking-wider text-text-secondary">{scenario.aiRole}</span>
+                  <LevelBadge
+                    level={proficiencyLevel}
+                    manualOverride={manualOverride}
+                    onLevelChange={(l) => {
+                      setProficiencyLevel(l);
+                      setManualOverride(true);
+                      setLevelSuggestion(null);
+                    }}
+                    onClearOverride={() => setManualOverride(false)}
                   />
                 </div>
-              )}
+              </div>
             </div>
-          )}
+
+            <button
+              onClick={handleEndDrill}
+              disabled={messages.length < 2 || drillEnded}
+              className="font-ui text-label uppercase tracking-widest px-4 py-2 bg-[var(--color-dark)] text-[var(--color-text-inverse)] hover:bg-accent transition-colors duration-fast disabled:opacity-50"
+            >
+              End Drill
+            </button>
+          </div>
+        </header>
+
+        {/* Conversation View */}
+        <div
+          ref={conversationRef}
+          className="flex-1 overflow-y-auto w-full pt-12 pb-24 scroll-smooth"
+        >
+          <div className="max-w-2xl mx-auto w-full px-6">
+            <ConversationView
+              messages={messages}
+              isLoading={isLoading}
+              isListening={isListening}
+              isSpeaking={isSpeaking}
+              scenario={scenario}
+            />
+
+            <StatusStrip
+              isListening={isListening}
+              isLoading={isLoading}
+              isSpeaking={isSpeaking}
+              isEvaluating={isEvaluating}
+              usingFallback={usingFallback}
+              isFirstMessage={messages.length <= 1}
+              onStop={stop}
+            />
+
+            {/* Live transcript */}
+            {(transcript || interimTranscript) && (
+              <div className="mt-8 animate-fade-in">
+                <div className="bg-surface border-l-2 border-accent px-6 py-4">
+                  <span className="font-ui text-[10px] uppercase tracking-widest text-accent block mb-2 font-semibold">
+                    Current Utterance
+                  </span>
+                  <p className="font-body text-text leading-prose">
+                    {transcript}
+                    <span className="text-text-secondary opacity-60 italic">{interimTranscript}</span>
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </div>
 
-      {/* Evaluation loading indicator — shown while /api/evaluate request is in flight */}
-      <EvaluationLoading isVisible={isEvaluating} />
+        {/* Interaction Surface */}
+        <div className="sticky bottom-0 bg-paper/95 backdrop-blur-md border-t border-divider pt-6 pb-8 md:pb-12">
+          <div className="max-w-2xl mx-auto px-6">
 
-      {/* Feedback Modal — shown when evaluation completes or errors */}
-      {showFeedback && (
-        <FeedbackCard
-          {...(evaluationError
-            ? {
+            {/* Level adjustment suggestion */}
+            {levelSuggestion && !drillEnded && !isListening && !isSpeaking && (
+              <div className="mb-6">
+                <LevelAdjustBanner
+                  from={proficiencyLevel}
+                  to={levelSuggestion.to}
+                  rationale={levelSuggestion.rationale}
+                  onAccept={() => {
+                    setProficiencyLevel(levelSuggestion.to);
+                    setManualOverride(true);
+                    setLevelSuggestion(null);
+                  }}
+                  onDismiss={() => setLevelSuggestion(null)}
+                />
+              </div>
+            )}
+
+            {/* Suggestions Tray */}
+            <div className="flex flex-col items-center mb-6">
+              {!showSuggestions && !isListening && !isSpeaking && !isLoading && !drillEnded && (
+                <button
+                  onClick={fetchSuggestions}
+                  disabled={isFetchingSuggestions}
+                  className="group font-ui text-[10px] uppercase tracking-[0.2em] text-accent hover:text-dark transition-colors flex items-center gap-3 disabled:opacity-50"
+                >
+                  <div className="w-1.5 h-1.5 rounded-full bg-accent group-hover:scale-125 transition-transform" />
+                  {isFetchingSuggestions ? 'Fetching Guidance...' : 'Stuck? See suggestions'}
+                </button>
+              )}
+
+              <ReplySuggestions
+                suggestions={suggestions}
+                onSelect={handleSuggestionSelect}
+                isVisible={showSuggestions && !drillEnded && !isListening && !isSpeaking}
+              />
+            </div>
+
+            {/* Mode toggle */}
+            <div className="flex justify-center mb-8">
+              <div className="inline-flex bg-surface border border-divider rounded-sm p-1">
+                <button
+                  onClick={() => setUseTextMode(false)}
+                  className={`px-6 py-2 font-ui text-[11px] uppercase tracking-widest rounded-sm transition-all duration-base ${!useTextMode
+                      ? 'bg-accent text-text-inverse shadow-sm'
+                      : 'text-text-secondary hover:text-dark'
+                    }`}
+                >
+                  Voice
+                </button>
+                <button
+                  onClick={() => setUseTextMode(true)}
+                  className={`px-6 py-2 font-ui text-[11px] uppercase tracking-widest rounded-sm transition-all duration-base ${useTextMode
+                      ? 'bg-accent text-text-inverse shadow-sm'
+                      : 'text-text-secondary hover:text-dark'
+                    }`}
+                >
+                  Text
+                </button>
+              </div>
+            </div>
+
+            {/* Input Controls */}
+            {useTextMode ? (
+              <form onSubmit={handleTextSubmit} className="flex gap-4">
+                <input
+                  type="text"
+                  value={textInput}
+                  onChange={(e) => setTextInput(e.target.value)}
+                  placeholder="Respond in Yoruba or English..."
+                  disabled={isLoading || drillEnded}
+                  className="flex-1 bg-white border border-divider rounded-sm px-6 py-4 font-body text-text placeholder-text-secondary/50 focus:outline-none focus:border-accent transition-colors disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={!textInput.trim() || isLoading || drillEnded}
+                  className="px-8 bg-dark text-text-inverse font-ui text-label uppercase tracking-widest hover:bg-accent transition-colors duration-fast disabled:opacity-30"
+                >
+                  {isLoading ? '...' : 'Send'}
+                </button>
+              </form>
+            ) : (
+              <div className="flex justify-center">
+                {!sttSupported || sttError === 'Microphone access denied' || sttError === 'Microphone unavailable' ? (
+                  <div className="text-center">
+                    <p className="font-ui text-xs text-accent-warm mb-3">
+                      {sttError || 'Speech recognition not available in this environment'}
+                    </p>
+                    <button
+                      onClick={() => setUseTextMode(true)}
+                      className="font-ui text-[11px] uppercase tracking-widest text-dark hover:text-accent underline underline-offset-4"
+                    >
+                      Switch to text input
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-4">
+                    {sttError && (
+                      <p className="font-ui text-[10px] uppercase tracking-widest text-accent-warm">Transcription failed • Try again</p>
+                    )}
+                    <MicButton
+                      isListening={isListening}
+                      isSpeaking={isSpeaking}
+                      isLoading={isLoading}
+                      onPress={handleMicPress}
+                      onRelease={handleMicRelease}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Modals & Overlays */}
+        <EvaluationLoading isVisible={isEvaluating} />
+
+        {showFeedback && (
+          <FeedbackCard
+            {...(evaluationError
+              ? {
                 state: 'error' as const,
                 errorMessage: evaluationError,
                 onRetry: fetchEvaluation,
                 onClose: () => router.push('/'),
               }
-            : {
+              : {
                 state: 'success' as const,
                 evaluation: evaluation!,
                 metrics: metrics,
@@ -615,8 +646,9 @@ export default function DrillPage() {
                   setLastAssessedTurnCount(0);
                 },
               })}
-        />
-      )}
-    </div>
+          />
+        )}
+      </div>
+    </main>
   );
 }

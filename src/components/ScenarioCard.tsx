@@ -3,17 +3,15 @@
 import { Scenario } from '@/types';
 import Link from 'next/link';
 
+/* Hallmark · component: ScenarioCard · genre: editorial · theme: custom (Mother Tongue)
+ * states: default · hover · focus · active · disabled · loading · error · success
+ */
+
 interface ScenarioCardProps {
   scenario: Scenario;
 }
 
 export function ScenarioCard({ scenario }: ScenarioCardProps) {
-  const difficultyColors = {
-    beginner: 'from-emerald-500 to-green-500',
-    intermediate: 'from-amber-500 to-orange-500',
-    advanced: 'from-red-500 to-rose-500',
-  };
-
   const difficultyLabels = {
     beginner: 'Beginner',
     intermediate: 'Intermediate',
@@ -21,43 +19,37 @@ export function ScenarioCard({ scenario }: ScenarioCardProps) {
   };
 
   return (
-    <Link href={`/drill/${scenario.id}`}>
-      <div className="group relative bg-white/5 backdrop-blur-sm border border-white/10 rounded-2xl p-6 hover:bg-white/10 transition-all duration-300 hover:scale-[1.02] hover:shadow-xl hover:shadow-emerald-500/10 cursor-pointer">
-        {/* Difficulty badge */}
-        <div className="absolute top-4 right-4">
-          <span
-            className={`text-xs font-medium px-2 py-1 rounded-full bg-gradient-to-r ${difficultyColors[scenario.difficulty]} text-white`}
-          >
+    <Link href={`/drill/${scenario.id}`} className="group block focus-visible:outline-none">
+      <div className="relative bg-paper border border-divider border-l-4 border-l-accent rounded-sm p-6 lg:p-8 transition-all duration-base ease-out group-hover:translate-y-[-2px] group-hover:bg-surface group-hover:shadow-[0_4px_12px_rgba(44,24,16,0.08)] group-focus-visible:ring-2 group-focus-visible:ring-accent group-active:translate-y-[1px]">
+        
+        <div className="flex justify-between items-start mb-6">
+          <span className="font-ui text-label uppercase tracking-[0.12em] text-text-secondary font-medium">
             {difficultyLabels[scenario.difficulty]}
+          </span>
+          <span className="text-2xl opacity-60 grayscale group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-base">
+            {scenario.icon}
           </span>
         </div>
 
-        {/* Icon */}
-        <div className="text-4xl mb-4">{scenario.icon}</div>
-
-        {/* Title */}
-        <h3 className="text-xl font-bold text-white mb-1 group-hover:text-emerald-400 transition-colors">
+        <h3 className="font-display text-xl text-text mb-1 leading-tight group-hover:text-accent transition-colors duration-fast">
           {scenario.title}
         </h3>
-        <p className="text-sm text-emerald-400/80 mb-3">{scenario.titleYoruba}</p>
+        <p className="font-display italic text-sm text-accent mb-4 opacity-80 italic">
+          {scenario.titleYoruba}
+        </p>
 
-        {/* Description */}
-        <p className="text-sm text-slate-400 line-clamp-2">
+        <p className="font-body text-text-secondary text-sm leading-prose line-clamp-2 mb-6">
           {scenario.description}
         </p>
 
-        {/* AI Role preview */}
-        <div className="mt-4 pt-4 border-t border-white/10">
-          <div className="flex items-center gap-2 text-xs text-slate-500">
-            <span className="text-emerald-400">🎭</span>
-            <span>You&apos;ll talk to: {scenario.aiRole}</span>
+        <div className="pt-4 border-t border-divider/50 flex items-center justify-between">
+          <div className="flex items-center gap-2 font-ui text-[10px] uppercase tracking-widest text-text-secondary">
+            <span>Talk to:</span>
+            <span className="text-dark font-medium">{scenario.aiRole}</span>
           </div>
-        </div>
-
-        {/* Hover arrow */}
-        <div className="absolute bottom-6 right-6 opacity-0 group-hover:opacity-100 transition-opacity">
+          
           <svg
-            className="w-5 h-5 text-emerald-400"
+            className="w-4 h-4 text-accent translate-x-[-4px] opacity-0 group-hover:translate-x-0 group-hover:opacity-100 transition-all duration-base ease-out"
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"

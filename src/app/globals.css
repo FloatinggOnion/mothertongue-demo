@@ -1,21 +1,83 @@
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=Inter:wght@400;500;600&display=swap');
 @import "tailwindcss";
 
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  /* Surfaces */
+  --color-paper: #F5F0E8;           /* Parchment — page background */
+  --color-surface: #EDE8DF;         /* Slightly darker parchment — cards */
+
+  /* Text */
+  --color-text: #2C1810;            /* Deep Bark — primary text */
+  --color-text-secondary: #A89B8C;  /* Warm Ash — secondary/muted text */
+  --color-text-inverse: #F5F0E8;    /* Parchment — text on dark surfaces */
+
+  /* Accent */
+  --color-accent: #C4622D;          /* Terracotta — primary CTA, links, active */
+  --color-accent-warm: #E8955A;     /* Sahara — secondary highlights, icons */
+  --color-accent-cool: #2D5A4E;     /* Forest Ink — success, alt accent */
+
+  /* Dark */
+  --color-dark: #2C1810;            /* Deep Bark — nav, footer */
+  --color-dark-alt: #1A2744;        /* Night Script — dark mode base */
+
+  /* Divider */
+  --color-divider: #D9D2C7;         /* Warm light grey — borders, rules */
+
+  /* Typography */
+  --font-display: 'Lora', serif;
+  --font-body: 'Lora', serif;
+  --font-ui: 'Inter', sans-serif;
+
+  /* Scale */
+  --text-hero: 3rem;
+  --text-display: 2rem;
+  --text-callout: 1.5rem;
+  --text-body-lg: 1.125rem;
+  --text-body: 1rem;
+  --text-caption: 0.875rem;
+  --text-label: 0.75rem;
+
+  /* Spacing (4-point scale) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 48px;
+  --space-2xl: 80px;
+  --space-3xl: 120px;
+
+  /* Motion */
+  --dur-fast: 150ms;
+  --dur-base: 250ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Tailwind Compatibility */
+  --background: var(--color-paper);
+  --foreground: var(--color-text);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--color-paper);
+  --color-surface: var(--color-surface);
+  --color-accent: var(--color-accent);
+  --color-accent-warm: var(--color-accent-warm);
+  --color-accent-cool: var(--color-accent-cool);
+  --color-dark: var(--color-dark);
+  --color-divider: var(--color-divider);
+  
+  --font-sans: var(--font-ui);
+  --font-serif: var(--font-body);
+  --font-display: var(--font-display);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-sans), system-ui, sans-serif;
+  font-family: var(--font-serif), serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* Custom animations */
@@ -46,16 +108,47 @@ body {
 }
 
 .animate-fade-in {
-  animation: fade-in 0.3s ease-out forwards;
+  animation: fade-in var(--dur-base) var(--ease-out) forwards;
 }
 
 .animate-pulse-ring {
   animation: pulse-ring 1.5s ease-in-out infinite;
 }
 
+/* Hero rosette pattern */
+.hero-pattern {
+  position: relative;
+  overflow: visible;
+}
+
+.section-divider {
+  position: relative;
+  height: 160px;
+  overflow: visible;
+  pointer-events: none;
+}
+.section-divider::before {
+  content: '';
+  position: absolute;
+  top: 90%;
+  left: 50%;
+  width: 250px;
+  height: 250px;
+  background-image: url('/native.jpg');
+  background-repeat: no-repeat;
+  background-size: contain;
+  opacity: 0.05;
+  transform: translate(-50%, -50%) rotate(25deg);
+}
+
+.hero-pattern {
+  position: relative;
+  overflow: visible;
+}
+
 /* Smooth scrollbar */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 ::-webkit-scrollbar-track {
@@ -63,16 +156,18 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 3px;
+  background: var(--color-divider);
+  border-radius: 4px;
+  border: 2px solid var(--color-paper);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--color-text-secondary);
 }
 
 /* Selection color */
 ::selection {
-  background: rgba(52, 211, 153, 0.3);
+  background: color-mix(in oklch, var(--color-accent), transparent 70%);
   color: inherit;
 }
+

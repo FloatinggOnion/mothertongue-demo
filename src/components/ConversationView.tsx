@@ -16,30 +16,37 @@ export function MessageBubble({
   const isUser = message.role === 'user';
 
   return (
-    <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 
-    animate-in fade-in slide-in-from-bottom-2 duration-500 fill-mode-both`}
+    <div
+      className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-6 animate-fade-in`}
     >
       <div
         className={`relative max-w-[80%] px-4 py-3 rounded-2xl ${
           isUser
-            ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white rounded-br-sm'
-            : 'bg-white/10 backdrop-blur-sm text-white border border-white/20 rounded-bl-sm'
+            ? 'bg-[var(--color-accent)] text-[var(--color-text-inverse)] rounded-br-sm'
+            : 'bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-divider)] rounded-bl-sm'
         }`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
-        <p className="text-sm md:text-base leading-relaxed">{message.content}</p>
+        <p className="text-sm md:text-base leading-relaxed font-body">
+          {message.content}
+        </p>
 
-        {/* Translation tooltip on hover */}
-        {message.translation && (isHovered || showTranslation) && (
-          <div
-            className={`absolute ${isUser ? 'right-0' : 'left-0'} top-full mt-2 z-10`}
+        {/* Inline translation — fades in on hover */}
+        {message.translation && (
+          <p
+            className={`text-xs mt-2 pt-2 border-t transition-all duration-200 font-ui ${
+              isUser
+                ? 'border-[var(--color-text-inverse)]/20 text-[var(--color-text-inverse)]/70'
+                : 'border-[var(--color-divider)] text-[var(--color-text-secondary)]'
+            } ${
+              isHovered || showTranslation
+                ? 'opacity-100 max-h-20'
+                : 'opacity-0 max-h-0 overflow-hidden border-transparent'
+            }`}
           >
-            <div className="bg-slate-800 text-slate-200 text-xs px-3 py-2 rounded-lg shadow-lg border border-slate-700 max-w-xs">
-              <span className="text-emerald-400 font-medium">Translation: </span>
-              {message.translation}
-            </div>
-          </div>
+            {message.translation}
+          </p>
         )}
       </div>
     </div>
@@ -64,53 +71,61 @@ export function ConversationView({
   return (
     <div className="flex-1 overflow-y-auto px-4 py-8 space-y-4">
       {messages.length === 0 && !isLoading && (
-        <div className="flex flex-col items-center justify-center py-20 text-center animate-in fade-in zoom-in-95 duration-1000">
-          <div className="bg-emerald-500/10 w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-emerald-500/20">
-            <span className="text-4xl">{scenario?.icon ?? '🎤'}</span>
+        <div className="flex flex-col items-center justify-center py-20 text-center animate-fade-in">
+          <div className="w-20 h-20 rounded-full flex items-center justify-center mb-6 border border-[var(--color-divider)] bg-[var(--color-surface)]">
+            <span className="font-display text-2xl text-[var(--color-accent)]">
+              {scenario?.icon ?? '🎤'}
+            </span>
           </div>
-          <h3 className="text-white font-semibold text-xl tracking-tight">Ready to practise?</h3>
+          <h3 className="font-display text-[var(--color-text)] text-xl mb-2">
+            Ready to practise?
+          </h3>
           {scenario && (
-            <p className="text-slate-400 text-sm max-w-[280px] mx-auto mt-2 leading-relaxed">
-              {scenario.context} — you&apos;re speaking with <span className="text-emerald-400">{scenario.aiRole}</span>.
+            <p className="font-body text-[var(--color-text-secondary)] text-sm max-w-[280px] mx-auto mt-2 leading-relaxed">
+              {scenario.context} — you&apos;re speaking with{' '}
+              <span className="text-[var(--color-accent)]">{scenario.aiRole}</span>.
             </p>
           )}
-          <p className="text-slate-500 text-xs mt-4">
-            Hold the mic to speak · or tap <span className="text-slate-400">Text</span> to type
+          <p className="font-ui text-[var(--color-text-secondary)] text-xs mt-4 uppercase tracking-widest">
+            Hold the mic to speak · tap Text to type
           </p>
         </div>
       )}
 
-  {messages.map((message) => (
-    <MessageBubble key={message.id} message={message} />
-  ))}
-      {/* 🎙️ Listening Indicator */}
-        {isListening && (
-          <div className="flex justify-end mb-4">
-            <div className="bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs px-4 py-2 rounded-2xl">
-              🎙️ Listening...
-            </div>
-          </div>
-        )}
+      {messages.map((message) => (
+        <MessageBubble key={message.id} message={message} />
+      ))}
 
-      {/* 🔊 Speaking Indicator */}
-        {isSpeaking && (
-          <div className="flex justify-start mb-4">
-            <div className="bg-blue-500/20 border border-blue-500/30 text-blue-300 text-xs px-4 py-2 rounded-2xl animate-pulse">
-              🔊 Speaking...
-            </div>
+      {/* Listening Indicator */}
+      {isListening && (
+        <div className="flex justify-end mb-4">
+          <div className="bg-[var(--color-accent)]/10 border border-[var(--color-accent)]/30 text-[var(--color-accent)] text-xs px-4 py-2 rounded-2xl font-ui uppercase tracking-widest">
+            Listening...
           </div>
-        )}
+        </div>
+      )}
+
+      {/* Speaking Indicator */}
+      {isSpeaking && (
+        <div className="flex justify-start mb-4">
+          <div className="bg-[var(--color-surface)] border border-[var(--color-divider)] text-[var(--color-text-secondary)] text-xs px-4 py-2 rounded-2xl animate-pulse font-ui uppercase tracking-widest">
+            Speaking...
+          </div>
+        </div>
+      )}
+
+      {/* Loading dots */}
       {isLoading && (
         <div className="flex justify-start mb-4">
-          <div className="bg-white/10 backdrop-blur-sm text-white border border-white/20 rounded-2xl rounded-bl-sm px-4 py-3">
+          <div className="bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-divider)] rounded-2xl rounded-bl-sm px-4 py-3">
             <div className="flex space-x-2">
-              <div className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce" />
+              <div className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" />
               <div
-                className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+                className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce"
                 style={{ animationDelay: '0.1s' }}
               />
               <div
-                className="w-2 h-2 bg-emerald-400 rounded-full animate-bounce"
+                className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce"
                 style={{ animationDelay: '0.2s' }}
               />
             </div>
@@ -118,12 +133,12 @@ export function ConversationView({
         </div>
       )}
 
-      {/* 💡 Idle Hint */}
-        {!isLoading && !isListening && !isSpeaking && messages.length > 0 && (
-          <div className="text-center text-[10px] text-slate-500 mt-2 animate-pulse">
-            Tap the mic or type to continue…
-          </div>
-        )}
+      {/* Idle hint */}
+      {!isLoading && !isListening && !isSpeaking && messages.length > 0 && (
+        <div className="text-center font-ui text-[10px] text-[var(--color-text-secondary)] mt-2 uppercase tracking-widest">
+          Tap the mic or type to continue...
+        </div>
+      )}
     </div>
   );
 }

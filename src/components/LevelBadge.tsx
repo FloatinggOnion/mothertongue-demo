@@ -4,9 +4,9 @@ import { useState, useRef, useEffect } from 'react';
 import { ProficiencyLevel } from '@/types';
 
 const LEVEL_COLORS: Record<ProficiencyLevel, string> = {
-  beginner: 'text-emerald-400 bg-emerald-500/15 border-emerald-500/30',
-  intermediate: 'text-amber-400 bg-amber-500/15 border-amber-500/30',
-  advanced: 'text-rose-400 bg-rose-500/15 border-rose-500/30',
+  beginner: 'text-[var(--color-accent-cool)] bg-[var(--color-accent-cool)]/10 border-[var(--color-accent-cool)]/30',
+  intermediate: 'text-[var(--color-accent-warm)] bg-[var(--color-accent-warm)]/10 border-[var(--color-accent-warm)]/30',
+  advanced: 'text-[var(--color-accent)] bg-[var(--color-accent)]/10 border-[var(--color-accent)]/30',
 };
 
 const LEVEL_LABELS: Record<ProficiencyLevel, string> = {
@@ -48,13 +48,13 @@ export function LevelBadge({ level, manualOverride, onLevelChange, onClearOverri
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 mt-2 bg-slate-800 border border-white/10 rounded-xl shadow-xl z-50 min-w-[180px] py-1 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute top-full right-0 mt-2 var(--color-surface) border var(--color-divider) rounded-xl shadow-xl z-50 min-w-[180px] py-1 animate-in fade-in zoom-in-95 duration-150">
           {(['beginner', 'intermediate', 'advanced'] as ProficiencyLevel[]).map((l) => (
             <button
               key={l}
               onClick={() => { onLevelChange(l); setOpen(false); }}
               className={`w-full text-left px-4 py-2 text-sm transition-colors hover:bg-white/10 ${
-                l === level ? 'text-white font-medium' : 'text-slate-400'
+                l === level ? 'var(--color-text) font-medium' : 'var(--color-text-secondary)'
               }`}
             >
               {l === level ? '✓ ' : '  '}{LEVEL_LABELS[l]}

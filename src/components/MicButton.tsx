@@ -35,7 +35,7 @@ export function MicButton({
               ? 'bg-slate-700 cursor-not-allowed opacity-50'
               : isListening
                 ? 'bg-gradient-to-r from-red-500 to-rose-500 scale-110 shadow-lg shadow-red-500/50'
-                : 'bg-gradient-to-r from-emerald-500 to-teal-500 hover:scale-105 shadow-lg shadow-emerald-500/30'
+                : 'bg-[#C4622D] hover:scale-105 shadow-lg shadow-[#C4622D]/30'
           }
         `}
       >

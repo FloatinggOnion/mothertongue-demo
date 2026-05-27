@@ -46,18 +46,25 @@ export function EvaluationLoading({ isVisible }: EvaluationLoadingProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-3xl max-w-lg w-full p-6 md:p-8 border border-white/10 shadow-2xl">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-[var(--color-paper)] rounded-3xl max-w-lg w-full p-6 md:p-8 border border-[var(--color-divider)] shadow-2xl">
         <div className="text-center">
-          <div className="text-4xl mb-4">⏳</div>
-          <h2 className="text-2xl font-bold text-white mb-4">{status}</h2>
+          {/* Terracotta ink-spread style loading indicator */}
+          <div className="flex justify-center mb-8">
+            <div className="relative w-12 h-12">
+              <div className="absolute inset-0 bg-[var(--color-accent)] rounded-full opacity-20 animate-pulse-ring" />
+              <div className="absolute inset-3 bg-[var(--color-accent)] rounded-full" />
+            </div>
+          </div>
+          
+          <h2 className="text-2xl font-bold text-[var(--color-text)] mb-4">{status}</h2>
 
           {/* Loading spinner */}
           <div className="flex justify-center mb-4">
-            <div className="w-8 h-8 border-4 border-slate-700 border-t-emerald-400 rounded-full animate-spin" />
+            <div className="w-8 h-8 border-4 border-[var(--color-divider)] border-t-[var(--color-accent)] rounded-full animate-spin" />
           </div>
 
-          <p className="text-slate-400 text-sm">
+          <p className="text-[var(--color-text-secondary)] text-sm">
             {isRetrying
               ? 'The AI is taking longer than usual. Still working on your feedback...'
               : 'Analyzing your conversation...'}
