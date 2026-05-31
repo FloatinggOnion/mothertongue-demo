@@ -38,7 +38,7 @@ export function MessageBubble({
             className={`text-xs mt-2 pt-2 border-t transition-all duration-200 font-ui ${
               isUser
                 ? 'border-[var(--color-text-inverse)]/20 text-[var(--color-text-inverse)]/70'
-                : 'border-[var(--color-divider)] text-[var(--color-text-secondary)]'
+                : 'border-[var(--color-divider)] text-[var(--color-text)]'
             } ${
               isHovered || showTranslation
                 ? 'opacity-100 max-h-20'

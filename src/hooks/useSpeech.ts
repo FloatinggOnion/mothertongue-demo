@@ -26,7 +26,6 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   const chunksRef = useRef<Blob[]>([]);
 
   useEffect(() => {
-    // Supported if the browser can capture audio and send to server
     setIsSupported(!!(navigator.mediaDevices?.getUserMedia));
   }, []);
 
@@ -34,7 +33,6 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-      // Pick best mimeType for this browser (audio/webm is Chrome-only)
       const mimeType = ['audio/webm', 'audio/mp4', 'audio/ogg'].find(
         (t) => MediaRecorder.isTypeSupported(t)
       );
@@ -116,110 +114,160 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
   };
 }
 
-// --- Speech Synthesis Hook (Modal + Browser Fallback) ---
+// --- Speech Synthesis Hook ---
 interface UseSpeechSynthesisReturn {
   speak: (text: string, gender?: 'male' | 'female') => void;
   stop: () => void;
   isSpeaking: boolean;
-  usingFallback: boolean; // Added for UI messaging
-  error: string | null;    // Added for tightening error handling
+  usingFallback: boolean;
+  error: string | null;
   isSupported: boolean;
 }
 
 export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [usingFallback, setUsingFallback] = useState(false); // Track fallback state
-  const [error, setError] = useState<string | null>(null);    // Track errors
+  const [usingFallback, setUsingFallback] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const currentObjectUrlRef = useRef<string | null>(null);
+  // Track whether we're in the middle of a server TTS request
+  // so we can abort if stop() is called before it completes
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    // Initialize audio element
     audioRef.current = new Audio();
-    audioRef.current.onended = () => setIsSpeaking(false);
+    audioRef.current.onended = () => {
+      setIsSpeaking(false);
+      setUsingFallback(false);
+      // Clean up object URL after playback
+      if (currentObjectUrlRef.current) {
+        URL.revokeObjectURL(currentObjectUrlRef.current);
+        currentObjectUrlRef.current = null;
+      }
+    };
     audioRef.current.onerror = () => {
       setIsSpeaking(false);
-      setError("Audio playback error");
+      setError('Audio playback error');
     };
+
+    return () => {
+      // Cleanup on unmount
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+      if (currentObjectUrlRef.current) {
+        URL.revokeObjectURL(currentObjectUrlRef.current);
+      }
+    };
+  }, []);
+
+  const stopBrowserSpeech = useCallback(() => {
+    if (typeof window !== 'undefined' && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+  }, []);
+
+  const stopServerAudio = useCallback(() => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+      audioRef.current.src = '';
+    }
+    if (currentObjectUrlRef.current) {
+      URL.revokeObjectURL(currentObjectUrlRef.current);
+      currentObjectUrlRef.current = null;
+    }
+    // Abort any in-flight fetch
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
   }, []);
 
   const speak = useCallback(async (text: string, gender?: 'male' | 'female') => {
     if (!text) return;
-    
-    try {
-      setIsSpeaking(true);
-      setError(null);
-      setUsingFallback(false);
-      
-      // Stop current audio if playing
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
 
-      // Fetch audio from Google TTS API
+    // Stop everything currently playing before starting new speech
+    stopServerAudio();
+    stopBrowserSpeech();
+
+    setIsSpeaking(true);
+    setError(null);
+    setUsingFallback(false);
+
+    // Create a new abort controller for this request
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
+
+    try {
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text,
-          gender: gender ?? 'male',
-        }),
+        body: JSON.stringify({ text, gender: gender ?? 'male' }),
+        signal: abortController.signal,
       });
 
       if (!response.ok) throw new Error('TTS server request failed');
 
       const blob = await response.blob();
+
+      // Check if we were aborted while waiting for the response
+      if (abortController.signal.aborted) return;
+
       const url = URL.createObjectURL(blob);
-      
+      currentObjectUrlRef.current = url;
+
       if (audioRef.current) {
         audioRef.current.src = url;
         await audioRef.current.play();
       }
-    } catch (err) {
+    } catch (err: unknown) {
+      // If aborted, just clean up silently
+      if ((err as { name?: string })?.name === 'AbortError') {
+        setIsSpeaking(false);
+        return;
+      }
+
       console.warn('Server TTS failed, using browser fallback:', err);
-      setUsingFallback(true); // Explicitly flag the fallback for UI messaging
-      
-      // --- BROWSER NATIVE FALLBACK ---
+      setUsingFallback(true);
+
       if (typeof window !== 'undefined' && window.speechSynthesis) {
-        // Cancel any ongoing browser speech
+        // Make sure browser speech is clear before starting
         window.speechSynthesis.cancel();
-        
+
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'yo-NG'; 
-        
-        utterance.onstart = () => setIsSpeaking(true);
+        utterance.lang = 'yo-NG';
+
+        utterance.onstart = () => {
+          setIsSpeaking(true);
+        };
         utterance.onend = () => {
           setIsSpeaking(false);
           setUsingFallback(false);
         };
         utterance.onerror = (e) => {
-          console.error("Browser TTS Error:", e);
+          // Ignore 'interrupted' errors — they're caused by cancel() calls
+          if (e.error === 'interrupted') return;
+          console.error('Browser TTS Error:', e);
           setIsSpeaking(false);
           setUsingFallback(false);
-          setError("Speech synthesis failed");
+          setError('Speech synthesis failed');
         };
-        
+
         window.speechSynthesis.speak(utterance);
       } else {
         setIsSpeaking(false);
-        setError("Speech not supported on this device");
+        setError('Speech not supported on this device');
       }
     }
-  }, []);
+  }, [stopServerAudio, stopBrowserSpeech]);
 
   const stop = useCallback(() => {
-    // Stop Server Audio
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-    // Stop Browser Audio
-    if (typeof window !== 'undefined' && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-    }
+    stopServerAudio();
+    stopBrowserSpeech();
     setIsSpeaking(false);
     setUsingFallback(false);
-  }, []);
+  }, [stopServerAudio, stopBrowserSpeech]);
 
   return {
     speak,
