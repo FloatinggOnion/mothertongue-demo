@@ -7,21 +7,9 @@ import Link from 'next/link';
 export default function Home() {
   return (
     <main className="relative min-h-screen selection:bg-accent/30">
-      {/* Decorative Motif Layer */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden" aria-hidden="true">
-        <svg width="100%" height="100%" className="w-full h-full opacity-[0.04]">
-          <pattern id="motif-spiral" x="0" y="0" width="400" height="400" patternUnits="userSpaceOnUse">
-            <circle cx="200" cy="200" r="180" fill="none" stroke="currentColor" strokeWidth="1" className="text-dark" />
-            <circle cx="200" cy="200" r="140" fill="none" stroke="currentColor" strokeWidth="1" className="text-dark" strokeDasharray="4 8" />
-            <path d="M200 20L200 380 M20 200L380 200 M72.7 72.7L327.3 327.3 M72.7 327.3L327.3 72.7" stroke="currentColor" strokeWidth="0.5" className="text-dark" />
-          </pattern>
-          <rect width="100%" height="100%" fill="url(#motif-spiral)" />
-        </svg>
-        {/* Global floating rosettes */}
-        <img src="/native.jpg" alt="" aria-hidden="true" className="absolute top-[15%] right-[-5%] w-[300px] opacity-[0.07] rotate-[15deg] pointer-events-none z-0" />
-        <img src="/native.jpg" alt="" aria-hidden="true" className="absolute bottom-[10%] left-[-5%] w-[250px] opacity-[0.06] rotate-[-10deg] pointer-events-none z-0" />
-        <img src="/native.jpg" alt="" aria-hidden="true" className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] opacity-[0.03] rotate-[45deg] pointer-events-none z-0" />
-      </div>
+      {/* Global floating rosettes */}
+      <img src="/native.jpg" alt="" aria-hidden="true" className="absolute top-[15%] right-[-5%] w-[300px] opacity-[0.09] rotate-[15deg] pointer-events-none z-0" />
+      <img src="/native.jpg" alt="" aria-hidden="true" className="absolute bottom-[10%] left-[-5%] w-[250px] opacity-[0.08] rotate-[-10deg] pointer-events-none z-0" />
       <div className="flex flex-col md:flex-row min-h-screen">
         {/* Left Rail (Desktop) */}
         <aside className="hidden md:flex w-[120px] lg:w-[140px] flex-col items-center py-12 border-r border-divider sticky top-0 h-screen shrink-0">
@@ -44,36 +32,72 @@ export default function Home() {
           <div className="max-w-6xl px-6 md:px-16 lg:px-24">
             
             {/* Hero Section */}
-            <section className="relative hero-pattern pt-16 md:pt-32 pb-24 border-b border-divider/50">
-              <div className="max-w-[75ch] relative z-10">
-                <blockquote className="font-display italic text-text-secondary text-lg md:text-xl mb-8 pl-6 border-l-2 border-accent">
-                  "Àjàlórá ni orí, kì í ṣe àjàlórá ni ẹsẹ̀."
-                  <cite className="block not-italic text-sm mt-2 text-text-secondary opacity-80">— The head is a treasure, not the feet.</cite>
-                </blockquote>
-                
-                <h1 className="font-display text-text text-hero leading-[1.1] mb-8 tracking-tight animate-fade-in">
-                  Your language is your inheritance.
-                </h1>
-                
-                <p className="font-body text-text-secondary text-body-lg leading-prose mb-12 max-w-[55ch]">
-                  Fluency is built lesson by lesson, memory by memory, story by story. 
-                  Practice Yoruba with an AI partner who understands the nuance of heritage and culture.
-                </p>
+            <section className="relative hero-pattern pt-16 md:pt-32 pb-12 border-b border-divider/50">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+                <div className="lg:col-span-7 xl:col-span-8 max-w-[75ch] relative z-10">
+                  <blockquote className="font-display italic text-text-secondary text-lg md:text-xl mb-8 pl-6 border-l-2 border-accent">
+                    "Àjàlórá ni orí, kì í ṣe àjàlórá ni ẹsẹ̀."
+                    <cite className="block not-italic text-sm mt-2 text-text-secondary opacity-80">— The head is a treasure, not the feet.</cite>
+                  </blockquote>
+                  
+                  <h1 className="font-display text-text text-hero leading-[1.1] mb-8 tracking-tight animate-fade-in">
+                    Your language is your inheritance.
+                  </h1>
+                  
+                  <p className="font-body text-text-secondary text-body-lg leading-prose mb-12 max-w-[55ch]">
+                    Fluency is built lesson by lesson, memory by memory, story by story. 
+                    Practice Yoruba with an AI partner who understands the nuance of heritage and culture.
+                  </p>
 
-                <div className="flex flex-col sm:flex-row gap-6">
-                  <Link 
-                    href="#scenarios" 
-                    className="inline-flex items-center justify-center px-8 py-3 bg-accent text-text-inverse font-ui text-caption font-medium rounded-md hover:bg-[#A84E22] transition-colors duration-fast ease-out"
-                  >
-                    Start a Conversation
-                  </Link>
-                  <Link 
-                    href="/about" 
-                    className="inline-flex items-center justify-center px-8 py-3 border-1.5 border-accent text-accent font-ui text-caption font-medium rounded-md hover:bg-accent/5 transition-colors duration-fast ease-out"
-                  >
-                    Our Philosophy
-                  </Link>
+                  <div className="flex flex-col sm:flex-row gap-6">
+                    <Link 
+                      href="#scenarios" 
+                      className="inline-flex items-center justify-center px-8 py-3 bg-accent text-text-inverse font-ui text-caption font-medium rounded-md hover:bg-[#A84E22] transition-colors duration-fast ease-out"
+                    >
+                      Start a Conversation
+                    </Link>
+                    <Link 
+                      href="/about" 
+                      className="inline-flex items-center justify-center px-8 py-3 border-1.5 border-accent text-accent font-ui text-caption font-medium rounded-md hover:bg-accent/5 transition-colors duration-fast ease-out"
+                    >
+                      Our Philosophy
+                    </Link>
+                  </div>
                 </div>
+
+                {/* Right Column: Language List */}
+                <aside className="hidden lg:flex flex-col lg:col-span-5 xl:col-span-4 border-l border-divider pl-12 py-2 self-stretch">
+                  <span className="font-ui uppercase tracking-widest text-text-secondary text-[10px] mb-12">Languages</span>
+                  
+                  <div className="flex flex-col gap-12">
+                    {/* 01 Yoruba */}
+                    <Link href="#scenarios" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
+                      <div className="flex items-baseline gap-4">
+                        <span className="font-display text-2xl opacity-40 select-none">01</span>
+                        <span className="font-display text-3xl">Yoruba</span>
+                      </div>
+                      <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">Western Nigeria</span>
+                    </Link>
+
+                    {/* 02 Igbo */}
+                    <div className="flex flex-col gap-1 text-text-secondary opacity-40 cursor-not-allowed select-none" title="Coming Soon">
+                      <div className="flex items-baseline gap-4">
+                        <span className="font-display text-2xl opacity-30 select-none">02</span>
+                        <span className="font-display text-3xl">Igbo</span>
+                      </div>
+                      <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">South-East Nigeria</span>
+                    </div>
+
+                    {/* 03 Hausa */}
+                    <div className="flex flex-col gap-1 text-text-secondary opacity-40 cursor-not-allowed select-none" title="Coming Soon">
+                      <div className="flex items-baseline gap-4">
+                        <span className="font-display text-2xl opacity-30 select-none">03</span>
+                        <span className="font-display text-3xl">Hausa</span>
+                      </div>
+                      <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">Northern Nigeria</span>
+                    </div>
+                  </div>
+                </aside>
               </div>
 
               <img src="/native.jpg" alt="Nigerian Pattern" className="absolute -top-10 -left-10 w-[240px] transform rotate-12 opacity-8 pointer-events-none" aria-hidden="true" />

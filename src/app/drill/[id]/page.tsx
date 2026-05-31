@@ -374,19 +374,6 @@ export default function DrillPage() {
       <img src="/native.jpg" alt="" aria-hidden="true" className="fixed top-[-5%] right-[-5%] w-[400px] opacity-[0.08] rotate-[15deg] pointer-events-none z-0" />
       <img src="/native.jpg" alt="" aria-hidden="true" className="fixed bottom-[10%] left-[-10%] w-[350px] opacity-[0.06] rotate-[-10deg] pointer-events-none z-0" />
 
-      {/* Decorative Motif Layer */}
-      <div className="absolute inset-0 pointer-events-none opacity-[0.03] overflow-hidden z-0" aria-hidden="true">
-        <svg width="100%" height="100%">
-          <pattern id="drill-motif" x="0" y="0" width="400" height="400" patternUnits="userSpaceOnUse">
-            <circle cx="200" cy="200" r="180" fill="none" stroke="currentColor" strokeWidth="1" className="text-dark" />
-            <path d="M200 20L200 380 M20 200L380 200" stroke="currentColor" strokeWidth="0.5" className="text-dark" />
-          </pattern>
-          <rect width="100%" height="100%" fill="url(#drill-motif)" />
-        </svg>
-        {/* Floating Rosettes */}
-        <img src="/native.jpg" alt="" aria-hidden="true" className="absolute top-1/3 right-1/4 w-[300px] opacity-[0.02] rotate-[45deg]" />
-      </div>
-
       {/* Left Rail (Desktop) */}
       <aside className="hidden md:flex w-[120px] lg:w-[140px] flex-col items-center py-12 border-r border-divider sticky top-0 h-screen shrink-0 z-20 bg-paper/50 backdrop-blur-sm">
         <button
