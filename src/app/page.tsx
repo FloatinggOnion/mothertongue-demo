@@ -51,7 +51,7 @@ export default function Home() {
 
                   <div className="flex flex-col sm:flex-row gap-6">
                     <Link 
-                      href="#scenarios" 
+                      href="/scenarios" 
                       className="inline-flex items-center justify-center px-8 py-3 bg-accent text-text-inverse font-ui text-caption font-medium rounded-md hover:bg-[#A84E22] transition-colors duration-fast ease-out"
                     >
                       Start a Conversation
@@ -71,7 +71,7 @@ export default function Home() {
                   
                   <div className="flex flex-col gap-12">
                     {/* 01 Yoruba */}
-                    <Link href="#scenarios" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
+                    <Link href="/scenarios" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
                       <div className="flex items-baseline gap-4">
                         <span className="font-display text-2xl opacity-40 select-none">01</span>
                         <span className="font-display text-3xl">Yoruba</span>
@@ -104,26 +104,7 @@ export default function Home() {
               <img src="/native.jpg" alt="Nigerian Pattern" className="absolute bottom-0 right-0 w-[180px] transform -rotate-12 opacity-7 pointer-events-none" aria-hidden="true" />
             </section>
             <div className="section-divider" aria-hidden="true" />
-            {/* Scenarios Section */}
-            <section id="scenarios" className="relative hero-pattern py-24 border-b border-divider/50">
-              <header className="mb-12">
-                <span className="font-ui text-label uppercase tracking-[0.1em] text-accent font-semibold block mb-4">Practice Grounds</span>
-                <h2 className="font-display text-display text-text leading-tight mb-4">Choose a Scenario</h2>
-                <p className="font-body text-text-secondary text-body leading-prose max-w-[50ch]">
-                  Pick a real-life situation to test your fluency. From market haggling to greeting elders with respect.
-                </p>
-              </header>
-
-              <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-                {scenarios.map((scenario) => (
-                  <ScenarioCard key={scenario.id} scenario={scenario} />
-                ))}
-              </div>
-              <img src="/native.jpg" alt="Nigerian Pattern" className="absolute top-1/4 -left-12 w-[220px] transform -rotate-12 opacity-8 pointer-events-none" aria-hidden="true" />
-              <img src="/native.jpg" alt="Nigerian Pattern" className="absolute top-0 right-10 w-[160px] transform rotate-45 opacity-6 pointer-events-none" aria-hidden="true" />
-              <img src="/native.jpg" alt="Nigerian Pattern" className="absolute bottom-0 left-1/4 w-[180px] transform rotate-12 opacity-7 pointer-events-none" aria-hidden="true" />
-            </section>
-            <div className="section-divider" aria-hidden="true" />
+            
             {/* Narrative / How it works */}
             <section className="relative hero-pattern py-24">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
@@ -200,4 +181,3 @@ export default function Home() {
     </main>
   );
 }
-
