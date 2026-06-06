@@ -24,9 +24,42 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { text, gender } = validationResult.data;
-    console.log('[TTS] Request:', { textLength: text.length, gender });
+    const { text, gender, language } = validationResult.data;
+    console.log('[TTS] Request:', { textLength: text.length, gender, language });
 
+    // ==========================================
+    // PATH A: HAUSA PIPELINE (Modal Engine)
+    // ==========================================
+    if (language?.toLowerCase() === 'hausa') {
+      const modalUrl = process.env.HAUSA_MODAL_TTS_URL;
+      if (!modalUrl) {
+        return NextResponse.json({ error: 'Hausa TTS URL not configured' }, { status: 500 });
+      }
+
+      console.log('[TTS Router] Dispatched Hausa TTS to Modal...');
+      
+      const modalResponse = await fetch(modalUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text })
+      });
+
+      if (!modalResponse.ok) {
+        console.error('[TTS Router] Hausa TTS failed:', modalResponse.statusText);
+        return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
+      }
+
+      const audioBuffer = await modalResponse.arrayBuffer();
+      return new NextResponse(audioBuffer, {
+        headers: {
+          'Content-Type': 'audio/wav',
+        },
+      });
+    }
+
+    // ==========================================
+    // PATH B: YORUBA PIPELINE (Google Cloud TTS)
+    // ==========================================
     const [response] = await client.synthesizeSpeech({
       input: { text },
       voice: {
@@ -79,3 +112,4 @@ export async function POST(request: NextRequest) {
     );
   }
 }
+

@@ -58,7 +58,13 @@ interface ConversationViewProps {
   isLoading?: boolean;
   isListening?: boolean;
   isSpeaking?: boolean;
-  scenario?: { context: string; aiRole: string; icon: string };
+  scenario?: { 
+    context: string; 
+    aiRole: string; 
+    aiRoleYoruba: string; 
+    icon: string;
+    language: 'yoruba' | 'hausa';
+  };
 }
 
 export function ConversationView({
@@ -81,9 +87,11 @@ export function ConversationView({
             Ready to practise?
           </h3>
           {scenario && (
-            <p className="font-body text-[var(--color-text-secondary)] text-sm max-w-[280px] mx-auto mt-2 leading-relaxed">
+            <p className="font-body text-[var(--color-text-secondary)] text-sm max-w-[320px] mx-auto mt-2 leading-relaxed">
               {scenario.context} — you&apos;re speaking with{' '}
-              <span className="text-[var(--color-accent)]">{scenario.aiRole}</span>.
+              <span className="text-[var(--color-accent)]" title={scenario.aiRoleYoruba}>
+                {scenario.aiRole}
+              </span>.
             </p>
           )}
           <p className="font-ui text-[var(--color-text-secondary)] text-xs mt-4 uppercase tracking-widest">

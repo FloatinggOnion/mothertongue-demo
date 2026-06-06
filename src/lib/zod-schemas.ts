@@ -18,11 +18,13 @@ export const ChatSchema = z.object({
   proficiencyLevel: ProficiencyLevelSchema,
   conversationHistory: z.array(MessageSchema),
   userMessage: z.string().min(1, 'userMessage is required'),
+  language: z.string().optional(), // 🌟 Added to support active language context
 });
 
 export const EvaluateSchema = z.object({
   scenarioId: z.string().min(1, 'scenarioId is required'),
   messages: z.array(MessageSchema).min(1, 'messages array must not be empty'),
+  language: z.string().optional(), // 🌟 Added to support cross-language evaluation
 });
 
 export const SuggestionsSchema = z.object({
@@ -30,11 +32,13 @@ export const SuggestionsSchema = z.object({
   proficiencyLevel: ProficiencyLevelSchema,
   conversationHistory: z.array(MessageSchema),
   lastAiMessage: z.string().min(1, 'lastAiMessage is required'),
+  language: z.string().optional(), // 🌟 Added so AI gives contextually relevant suggestions
 });
 
 export const TtsSchema = z.object({
   text: z.string().min(1, 'text is required'),
   gender: z.enum(['male', 'female']).optional(),
+  language: z.string().optional(), // 🌟 Added to route to proper TTS engine
 });
 
 export const AssessLevelSchema = z.object({

@@ -4,6 +4,10 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 // --- Speech Recognition Hook (Server-side Gemini Fallback) ---
 
+interface UseSpeechRecognitionOptions {
+  lang?: string;
+}
+
 interface UseSpeechRecognitionReturn {
   isListening: boolean;
   transcript: string;
@@ -15,7 +19,8 @@ interface UseSpeechRecognitionReturn {
   error: string | null;
 }
 
-export function useSpeechRecognition(): UseSpeechRecognitionReturn {
+// 🌟 Added options parameter to handle dynamic language locale passing
+export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [interimTranscript, setInterimTranscript] = useState('');
@@ -24,6 +29,12 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  
+  // Keep a stable ref to options so it doesn't break useCallback caches
+  const optionsRef = useRef(options);
+  useEffect(() => {
+    optionsRef.current = options;
+  }, [options]);
 
   useEffect(() => {
     setIsSupported(!!(navigator.mediaDevices?.getUserMedia));
@@ -56,6 +67,10 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
           setInterimTranscript('Processing audio...');
           const formData = new FormData();
           formData.append('audio', blob);
+          
+          // Append explicit language string so backend routing correctly resolves 'hausa' or 'yoruba'
+          const languageCode = optionsRef.current?.lang?.startsWith('ha') ? 'hausa' : 'yoruba';
+          formData.append('language', languageCode);
 
           const response = await fetch('/api/transcribe', {
             method: 'POST',
@@ -115,6 +130,10 @@ export function useSpeechRecognition(): UseSpeechRecognitionReturn {
 }
 
 // --- Speech Synthesis Hook ---
+interface UseSpeechSynthesisOptions {
+  lang?: string;
+}
+
 interface UseSpeechSynthesisReturn {
   speak: (text: string, gender?: 'male' | 'female') => void;
   stop: () => void;
@@ -124,12 +143,13 @@ interface UseSpeechSynthesisReturn {
   isSupported: boolean;
 }
 
-export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
+export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpeechSynthesisReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [usingFallback, setUsingFallback] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentObjectUrlRef = useRef<string | null>(null);
+  
   // Track whether we're in the middle of a server TTS request
   // so we can abort if stop() is called before it completes
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -200,10 +220,11 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
     abortControllerRef.current = abortController;
 
     try {
+      const languagePayload = options?.lang?.startsWith('ha') ? 'hausa' : 'yoruba';
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, gender: gender ?? 'male' }),
+        body: JSON.stringify({ text, gender: gender ?? 'male', language: languagePayload }),
         signal: abortController.signal,
       });
 
@@ -236,7 +257,7 @@ export function useSpeechSynthesis(): UseSpeechSynthesisReturn {
         window.speechSynthesis.cancel();
 
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = 'yo-NG';
+        utterance.lang = options?.lang || 'yo-NG';
 
         utterance.onstart = () => {
           setIsSpeaking(true);

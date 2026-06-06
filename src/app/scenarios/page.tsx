@@ -1,10 +1,23 @@
+'use client';
+
 import { scenarios } from '@/config/scenarios';
 import { ScenarioCard } from '@/components';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 
 /* Hallmark · genre: editorial · macrostructure: Scenarios Grid · design-system: design.md */
 
 export default function ScenariosPage() {
+  const searchParams = useSearchParams();
+  
+  // Extract and normalize the selected language parameter ('yoruba' | 'hausa')
+  const selectedLang = searchParams.get('lang')?.toLowerCase() || 'yoruba';
+
+  // Filter scenarios to match only the active language selection
+  const filteredScenarios = scenarios.filter(
+    (scenario) => scenario.language === selectedLang
+  );
+
   return (
     <main className="relative min-h-screen bg-paper selection:bg-accent/30 overflow-x-hidden flex">
       {/* Left Rail (Desktop) */}
@@ -31,32 +44,61 @@ export default function ScenariosPage() {
       />
       
       <div className="flex-grow max-w-[1200px] mx-auto px-6 md:px-16 lg:px-24 py-12 md:py-20 relative z-10">
-        {/* Back Arrow */}
-        <Link 
-          href="/" 
-          className="inline-flex items-center gap-3 text-text-secondary hover:text-accent transition-all duration-base group mb-12"
-        >
-          <div className="w-10 h-10 rounded-full border border-divider flex items-center justify-center group-hover:border-accent group-hover:bg-accent/5 transition-all">
-            <svg 
-              className="w-5 h-5 transition-transform group-hover:translate-x-[-2px]" 
-              fill="none" 
-              stroke="currentColor" 
-              viewBox="0 0 24 24"
+        {/* Navigation Actions Row */}
+        <div className="flex flex-wrap items-center justify-between gap-6 mb-12">
+          {/* Back Arrow */}
+          <Link 
+            href="/" 
+            className="inline-flex items-center gap-3 text-text-secondary hover:text-accent transition-all duration-base group"
+          >
+            <div className="w-10 h-10 rounded-full border border-divider flex items-center justify-center group-hover:border-accent group-hover:bg-accent/5 transition-all">
+              <svg 
+                className="w-5 h-5 transition-transform group-hover:translate-x-[-2px]" 
+                fill="none" 
+                stroke="currentColor" 
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
+              </svg>
+            </div>
+            <span className="font-ui text-[10px] uppercase tracking-[0.25em]">Back to Home</span>
+          </Link>
+
+          {/* Quick Filter Language Toggle Tab */}
+          <div className="flex items-center gap-2 border border-divider p-1 rounded-md bg-paper/50 backdrop-blur-sm">
+            <Link
+              href="/scenarios?lang=yoruba"
+              className={`px-4 py-1.5 font-ui text-[10px] uppercase tracking-wider font-medium rounded transition-all duration-fast ${
+                selectedLang === 'yoruba'
+                  ? 'bg-accent text-text-inverse shadow-sm'
+                  : 'text-text-secondary hover:text-dark'
+              }`}
             >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 19l-7-7 7-7" />
-            </svg>
+              Yoruba
+            </Link>
+            <Link
+              href="/scenarios?lang=hausa"
+              className={`px-4 py-1.5 font-ui text-[10px] uppercase tracking-wider font-medium rounded transition-all duration-fast ${
+                selectedLang === 'hausa'
+                  ? 'bg-accent text-text-inverse shadow-sm'
+                  : 'text-text-secondary hover:text-dark'
+              }`}
+            >
+              Hausa
+            </Link>
           </div>
-          <span className="font-ui text-[10px] uppercase tracking-[0.25em]">Back to Home</span>
-        </Link>
+        </div>
 
         {/* Header Area */}
         <header className="mb-12">
-
-          <h1 className="font-display text-text text-[3.5rem] md:text-hero leading-[1.1] mb-6 tracking-tight animate-fade-in">
-            Choose a Scenario
+          <h1 className="font-display text-text text-[3.5rem] md:text-hero leading-[1.1] mb-6 tracking-tight capitalize animate-fade-in">
+            {selectedLang} Scenarios
           </h1>
           <p className="font-body text-text-secondary text-body-lg leading-prose max-w-[50ch] animate-fade-in [animation-delay:100ms]">
-            Pick a real-life situation to test your fluency. From market haggling to greeting elders with respect.
+            {selectedLang === 'hausa' 
+              ? 'Pick a real-life northern scenario to test your fluency. Practice natural conversation protocols with cultural context.'
+              : 'Pick a real-life situation to test your fluency. From market haggling to greeting elders with proper respect.'
+            }
           </p>
         </header>
 
@@ -66,7 +108,7 @@ export default function ScenariosPage() {
         {/* Scenarios Grid */}
         <section className="hero-pattern animate-fade-in [animation-delay:200ms]">
           <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-8">
-            {scenarios.map((scenario) => (
+            {filteredScenarios.map((scenario) => (
               <ScenarioCard key={scenario.id} scenario={scenario} />
             ))}
           </div>

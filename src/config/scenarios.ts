@@ -3,6 +3,7 @@ import { Scenario } from '@/types';
 export const scenarios: Scenario[] = [
   {
     id: 'market-haggling',
+    language: 'yoruba',
     title: 'Market Haggling',
     titleYoruba: 'Ríra Lọ́jà',
     description: 'Bargain for goods at a Nigerian market',
@@ -19,6 +20,7 @@ The market is busy and lively.`,
   },
   {
     id: 'greeting-elders',
+    language: 'yoruba',
     title: 'Greeting Elders',
     titleYoruba: 'Ìkíni Àwọn Àgbà',
     description: 'Practice proper greetings and respect for elders',
@@ -35,6 +37,7 @@ Show respect while maintaining warm family connection.`,
   },
   {
     id: 'ordering-food',
+    language: 'yoruba',
     title: 'Ordering Food',
     titleYoruba: 'Títọ́ Oúnjẹ',
     description: 'Order a meal at a local restaurant or buka',
@@ -51,6 +54,7 @@ The place is casual and friendly.`,
   },
   {
     id: 'chatting-friends',
+    language: 'yoruba',
     title: 'Chatting with Friends',
     titleYoruba: 'Ìbánisọ̀rọ̀ Pẹ̀lú Ọ̀rẹ́',
     description: 'Have a casual conversation with your peers',
@@ -67,6 +71,7 @@ The vibe is relaxed and playful.`,
   },
   {
     id: 'transportation',
+    language: 'yoruba',
     title: 'Transportation',
     titleYoruba: 'Ìrìnàjò',
     description: 'Navigate public transport like danfo and okada',
@@ -81,6 +86,39 @@ You need to know where to drop and how much to pay.`,
     difficulty: 'advanced',
     gender: 'male',
   },
+  {
+    id: 'hausa-market-haggling',
+    language: 'hausa',
+    title: 'Market Haggling',
+    titleYoruba: 'Ciniki a Kasuwa',
+    description: 'Bargain for goods at a northern market',
+    icon: '🛒',
+    context: `You are at Malam Bello's spice and grain stall in Kurmi Market, Kano.
+He sells onions, peppers, rice, and various spices.
+Friendly bargaining is an essential part of the transaction.
+The market environment is energetic and bustling.`,
+    aiRole: 'Malam Bello, a polite but firm Hausa trader',
+    aiRoleYoruba: 'Malam Bello, mai shago mai bincike',
+    starterPrompt: 'Sannu da zuwa! Shigo ciki. Kana son sayan albasa ko shinkafa yau? Akwai kaya masu kyau sosai!',
+    difficulty: 'beginner',
+    gender: 'male',
+  },
+  {
+    id: 'hausa-greeting-elders',
+    language: 'hausa',
+    title: 'Greeting Elders',
+    titleYoruba: 'Gaishe da Dattijai',
+    description: 'Practice respectful greetings and traditional etiquette',
+    icon: '🙏',
+    context: `You are visiting a respected family elder, Alhaji Ibrahim, at his home in Kaduna.
+Showing deep respect and using proper honorific structures is key in Hausa culture.
+The atmosphere is serene and formal.`,
+    aiRole: 'Alhaji Ibrahim, your dignified and welcoming uncle',
+    aiRoleYoruba: 'Alhaji Ibrahim, dattijo mai mutunci',
+    starterPrompt: 'Barka da rana, barka da zuwa. Ina kwana? Yaya iyali da mutanen gida?',
+    difficulty: 'beginner',
+    gender: 'male',
+  }
 ];
 
 export function getScenarioById(id: string): Scenario | undefined {

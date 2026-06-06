@@ -46,21 +46,21 @@ export default function Home() {
                   
                   <p className="font-body text-text-secondary text-body-lg leading-prose mb-12 max-w-[55ch]">
                     Fluency is built lesson by lesson, memory by memory, story by story. 
-                    Practice Yoruba with an AI partner who understands the nuance of heritage and culture.
+                    Practice your native tongue with an AI partner who understands the nuance of heritage and culture.
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-6">
                     <Link 
-                      href="/scenarios" 
+                      href="/scenarios?lang=yoruba" 
                       className="inline-flex items-center justify-center px-8 py-3 bg-accent text-text-inverse font-ui text-caption font-medium rounded-md hover:bg-[#A84E22] transition-colors duration-fast ease-out"
                     >
-                      Start a Conversation
+                      Practice Yoruba
                     </Link>
                     <Link 
-                      href="/about" 
+                      href="/scenarios?lang=hausa" 
                       className="inline-flex items-center justify-center px-8 py-3 border-1.5 border-accent text-accent font-ui text-caption font-medium rounded-md hover:bg-accent/5 transition-colors duration-fast ease-out"
                     >
-                      Our Philosophy
+                      Practice Hausa
                     </Link>
                   </div>
                 </div>
@@ -71,7 +71,7 @@ export default function Home() {
                   
                   <div className="flex flex-col gap-12">
                     {/* 01 Yoruba */}
-                    <Link href="/scenarios" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
+                    <Link href="/scenarios?lang=yoruba" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
                       <div className="flex items-baseline gap-4">
                         <span className="font-display text-2xl opacity-40 select-none">01</span>
                         <span className="font-display text-3xl">Yoruba</span>
@@ -79,22 +79,22 @@ export default function Home() {
                       <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">Western Nigeria</span>
                     </Link>
 
-                    {/* 02 Igbo */}
-                    <div className="flex flex-col gap-1 text-text-secondary opacity-40 cursor-not-allowed select-none" title="Coming Soon">
+                    {/* 02 Hausa */}
+                    <Link href="/scenarios?lang=hausa" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
                       <div className="flex items-baseline gap-4">
-                        <span className="font-display text-2xl opacity-30 select-none">02</span>
-                        <span className="font-display text-3xl">Igbo</span>
-                      </div>
-                      <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">South-East Nigeria</span>
-                    </div>
-
-                    {/* 03 Hausa */}
-                    <div className="flex flex-col gap-1 text-text-secondary opacity-40 cursor-not-allowed select-none" title="Coming Soon">
-                      <div className="flex items-baseline gap-4">
-                        <span className="font-display text-2xl opacity-30 select-none">03</span>
+                        <span className="font-display text-2xl opacity-40 select-none">02</span>
                         <span className="font-display text-3xl">Hausa</span>
                       </div>
                       <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">Northern Nigeria</span>
+                    </Link>
+
+                    {/* 03 Igbo */}
+                    <div className="flex flex-col gap-1 text-text-secondary opacity-40 cursor-not-allowed select-none" title="Coming Soon">
+                      <div className="flex items-baseline gap-4">
+                        <span className="font-display text-2xl opacity-30 select-none">03</span>
+                        <span className="font-display text-3xl">Igbo</span>
+                      </div>
+                      <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">South-East Nigeria</span>
                     </div>
                   </div>
                 </aside>
@@ -168,9 +168,6 @@ export default function Home() {
                 
                 <div className="flex flex-col items-start md:items-end gap-4">
                   <span className="font-display text-xl text-dark">Mother Tongue</span>
-                  <p className="text-text-secondary text-[10px] font-ui uppercase tracking-widest">
-                    © 2026 • Powered by Gemini • Built for the Heritage
-                  </p>
                 </div>
               </div>
             </footer>

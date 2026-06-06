@@ -7,6 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
 
+    // Validate request body with Zod
     const validationResult = SuggestionsSchema.safeParse(body);
     if (!validationResult.success) {
       return NextResponse.json(
@@ -30,18 +31,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const suggestions = await getReplySuggestions(
-      scenario,
+    // Safely inject the language onto the scenario context to pass it seamlessly
+    const fallbackData = validationResult.data as Record<string, any>;
+    const dynamicScenario = {
+      ...scenario,
+      language: fallbackData.language || 'yoruba'
+    };
+
+    // Get dynamic speech variations from Gemini based on the selected language
+    const response = await getReplySuggestions(
+      dynamicScenario,
       proficiencyLevel,
       conversationHistory,
       lastAiMessage
     );
 
-    return NextResponse.json({ suggestions });
+    return NextResponse.json(response);
   } catch (error) {
     console.error('Suggestions API error:', error);
     return NextResponse.json(
-      { error: 'Failed to get suggestions' },
+      { error: 'Failed to generate suggestions' },
       { status: 500 }
     );
   }

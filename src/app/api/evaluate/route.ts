@@ -23,6 +23,7 @@ export async function POST(request: NextRequest) {
     const {
       scenarioId: validatedScenarioId,
       messages,
+      language,
     } = validationResult.data;
 
     scenarioId = validatedScenarioId;
@@ -36,7 +37,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const evaluation = await evaluateConversation(scenario, messages);
+    const evaluation = await evaluateConversation(scenario, messages, language);
 
     return NextResponse.json(evaluation);
   } catch (error) {

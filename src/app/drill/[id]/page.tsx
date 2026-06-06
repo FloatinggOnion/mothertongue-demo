@@ -32,6 +32,9 @@ export default function DrillPage() {
   const scenarioId = params.id as string;
   const scenario = getScenarioById(scenarioId);
 
+  // Normalize active language selection
+  const isHausa = scenario?.language === 'hausa';
+
   // State
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -66,16 +69,11 @@ export default function DrillPage() {
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
 
   // Refs
-  const silenceTimerRef = useRef<NodeJS.Timeout | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
-  // Used to bridge the async STT transcription gap: handleMicRelease awaits a
-  // Promise that resolves when the STT hook signals it has finished (interimTranscript
-  // returns to '' after showing 'Processing audio...'). This eliminates the race
-  // condition where a fixed 300ms timeout fires before the server-side fetch completes.
   const transcriptReadyResolveRef = useRef<((text: string) => void) | null>(null);
   const processingStartedRef = useRef(false);
 
-  // Speech hooks
+  // Speech hooks (Passing dynamic BCP-47 locale config directly to initialization)
   const {
     isListening,
     transcript,
@@ -85,14 +83,18 @@ export default function DrillPage() {
     resetTranscript,
     isSupported: sttSupported,
     error: sttError,
-  } = useSpeechRecognition();
+  } = useSpeechRecognition({
+    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG'
+  });
 
-  const { speak, stop, isSpeaking, usingFallback, error: ttsError } = useSpeechSynthesis();
+  const { speak, stop, isSpeaking, usingFallback } = useSpeechSynthesis({
+    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG'
+  });
 
   useEffect(() => {
-  const saved = loadSession(scenarioId)?.messages;
-  if (saved) setMessages(saved);
-}, [scenarioId]);
+    const saved = loadSession(scenarioId)?.messages;
+    if (saved) setMessages(saved);
+  }, [scenarioId]);
 
   // Watch interimTranscript to detect when STT server-side transcription completes.
   useEffect(() => {
@@ -132,7 +134,6 @@ export default function DrillPage() {
     }
   }, [messages]);
 
-
   // Persist session to localStorage on meaningful state changes
   useEffect(() => {
     if (drillEnded || messages.length === 0) return;
@@ -170,6 +171,7 @@ export default function DrillPage() {
           proficiencyLevel,
           conversationHistory: messages,
           lastAiMessage: lastAiMessage.content,
+          language: scenario.language,
         }),
       });
 
@@ -211,6 +213,7 @@ export default function DrillPage() {
           proficiencyLevel,
           conversationHistory: [...messages, userMessage],
           userMessage: userText.trim(),
+          language: scenario.language,
         }),
       });
 
@@ -237,6 +240,7 @@ export default function DrillPage() {
             body: JSON.stringify({
               proficiencyLevel,
               conversationHistory: [...messages, userMessage],
+              language: scenario.language,
             }),
           })
             .then((r) => r.json())
@@ -260,6 +264,8 @@ export default function DrillPage() {
   const handleMicPress = useCallback(() => {
     setShowSuggestions(false);
     setSpeakingStartTime(Date.now());
+    
+    // Call parameterless function safely since hook is configured on creation
     startListening();
   }, [startListening]);
 
@@ -320,6 +326,7 @@ export default function DrillPage() {
         body: JSON.stringify({
           scenarioId: scenario.id,
           messages: messages.filter((m) => m.id !== 'initial'),
+          language: scenario.language,
         }),
       });
 
@@ -377,7 +384,7 @@ export default function DrillPage() {
       {/* Left Rail (Desktop) */}
       <aside className="hidden md:flex w-[120px] lg:w-[140px] flex-col items-center py-12 border-r border-divider sticky top-0 h-screen shrink-0 z-20 bg-paper/50 backdrop-blur-sm">
         <button
-          onClick={() => router.push('/')}
+          onClick={() => router.push(`/scenarios?lang=${scenario.language}`)}
           className="group mb-12 hover:translate-x-[-2px] transition-transform duration-base"
         >
           <svg className="w-6 h-6 text-text-secondary group-hover:text-accent" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -404,7 +411,7 @@ export default function DrillPage() {
           <div className="max-w-2xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
-                onClick={() => router.push('/')}
+                onClick={() => router.push(`/scenarios?lang=${scenario.language}`)}
                 className="md:hidden text-text-secondary hover:text-dark transition-colors"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -557,7 +564,7 @@ export default function DrillPage() {
                   type="text"
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
-                  placeholder="Respond in Yoruba or English..."
+                  placeholder={isHausa ? "Respond in Hausa or English..." : "Respond in Yoruba or English..."}
                   disabled={isLoading || drillEnded}
                   className="flex-1 bg-white border border-divider rounded-sm px-6 py-4 font-body text-text placeholder-text-secondary/50 focus:outline-none focus:border-accent transition-colors disabled:opacity-50"
                 />
@@ -612,7 +619,7 @@ export default function DrillPage() {
                 state: 'error' as const,
                 errorMessage: evaluationError,
                 onRetry: fetchEvaluation,
-                onClose: () => router.push('/'),
+                onClose: () => router.push(`/scenarios?lang=${scenario.language}`),
               }
               : {
                 state: 'success' as const,
@@ -620,7 +627,7 @@ export default function DrillPage() {
                 metrics: metrics,
                 proficiencyLevel,
                 startingLevel,
-                onClose: () => router.push('/'),
+                onClose: () => router.push(`/scenarios?lang=${scenario.language}`),
                 onTryAgain: () => {
                   clearSession(scenarioId);
                   setMessages([]);

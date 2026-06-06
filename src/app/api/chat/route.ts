@@ -1,8 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import {
-  getPartnerResponse,
-  getReplySuggestions,
-} from '@/services/gemini';
+import { getPartnerResponse } from '@/services/gemini';
 import { getScenarioById } from '@/config/scenarios';
 import { ChatSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
@@ -34,9 +31,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Get AI partner response
+    // 🌟 Safely attach the language onto the scenario object 
+    // This passes the data forward without using a 5th argument slot
+    const fallbackData = validationResult.data as Record<string, any>;
+    const dynamicScenario = {
+      ...scenario,
+      language: fallbackData.language || 'yoruba'
+    };
+
+    // Get AI partner response using 4 parameters
     const response = await getPartnerResponse(
-      scenario,
+      dynamicScenario,
       proficiencyLevel,
       conversationHistory,
       userMessage
