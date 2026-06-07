@@ -1,4 +1,4 @@
-import { Message, ProficiencyLevel, ReplySuggestion, Evaluation } from '@/types';
+import { Message, ProficiencyLevel, ReplySuggestion, Evaluation, ProficiencyAssessment } from '@/types';
 
 // Helper to get API configurations cleanly
 const getApiKey = () => process.env.GEMINI_API_KEY || '';
@@ -290,6 +290,67 @@ export async function evaluateConversation(
   } catch (error) {
     console.error('Error evaluating conversation:', error);
     throw error;
+  }
+}
+
+/**
+ * Assesses whether the user's current proficiency level still fits their performance,
+ * recommending a level adjustment when the conversation suggests otherwise.
+ */
+export async function assessProficiency(
+  conversationHistory: Message[],
+  proficiencyLevel: ProficiencyLevel,
+  language?: string
+): Promise<ProficiencyAssessment> {
+  const apiKey = getApiKey();
+  const langDisplay = (language || '').toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
+
+  const systemPrompt = `
+    You are an expert ${langDisplay} language proficiency assessor.
+    The user is currently set at the "${proficiencyLevel}" level.
+    Review the following conversation and judge whether this level still fits the user's
+    demonstrated ability, or whether a different level would serve them better.
+
+    OUTPUT FORMAT REQUIREMENTS:
+    Return exactly one JSON object with the following schema:
+    {
+      "recommendedLevel": "beginner" | "intermediate" | "advanced",
+      "rationale": "string (a brief, encouraging explanation for the recommendation)",
+      "confidence": "low" | "high"
+    }
+
+    Only set "confidence" to "high" when the conversation gives clear, consistent evidence
+    that a different level would suit the user better. Otherwise use "low".
+  `.trim();
+
+  const formattedContents = formatGeminiHistory(conversationHistory);
+
+  if (formattedContents.length === 0 || formattedContents[formattedContents.length - 1].role === 'model') {
+    formattedContents.push({ role: 'user', parts: [{ text: 'Please assess my proficiency level based on the conversation above.' }] });
+  } else {
+    formattedContents[formattedContents.length - 1].parts[0].text += '\n\nPlease assess my proficiency level based on the conversation above.';
+  }
+
+  try {
+    const response = await fetch(`${getBaseUrl()}?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: formattedContents,
+        systemInstruction: { parts: [{ text: systemPrompt }] },
+        generationConfig: { responseMimeType: 'application/json', temperature: 0.3 },
+      }),
+    });
+
+    if (!response.ok) throw new Error('Failed to assess proficiency');
+
+    const data = await response.json();
+    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text
+      || `{"recommendedLevel":"${proficiencyLevel}","rationale":"","confidence":"low"}`;
+    return JSON.parse(rawText);
+  } catch (error) {
+    console.error('Error assessing proficiency:', error);
+    return { recommendedLevel: proficiencyLevel, rationale: '', confidence: 'low' };
   }
 }
 
