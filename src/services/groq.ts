@@ -1,34 +1,52 @@
-import { Message, ProficiencyLevel, ReplySuggestion, Evaluation } from '@/types';
+import { Message, ProficiencyLevel, ReplySuggestion, Evaluation, ProficiencyAssessment } from '@/types';
 
 // Helper to get API configurations cleanly
-const getApiKey = () => process.env.GEMINI_API_KEY || '';
-const getBaseUrl = () => 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
+const getApiKey = () => process.env.GROQ_API_KEY || '';
+const getBaseUrl = () => 'https://api.groq.com/openai/v1/chat/completions';
+const MODEL = 'llama-3.3-70b-versatile';
 
 /**
- * Helper to format application message history into the strict alternating sequence 
- * required by the Gemini REST API. Ensures the first message is 'user' and merges 
- * consecutive identical roles.
+ * Helper to format application message history into the OpenAI-compatible
+ * chat message shape expected by the Groq API.
  */
-function formatGeminiHistory(history: Message[]): any[] {
-  const contents: any[] = [];
-  
-  for (const msg of history) {
-    const role = msg.role === 'ai' ? 'model' : 'user';
-    
-    // Rule 1: First message must be 'user'
-    if (contents.length === 0 && role === 'model') {
-      contents.push({ role: 'user', parts: [{ text: 'Let us begin.' }] });
-    }
-    
-    // Rule 2: Strictly alternating roles
-    if (contents.length > 0 && contents[contents.length - 1].role === role) {
-      contents[contents.length - 1].parts[0].text += '\n\n' + msg.content;
-    } else {
-      contents.push({ role, parts: [{ text: msg.content }] });
-    }
+function formatGroqHistory(history: Message[]): { role: 'user' | 'assistant'; content: string }[] {
+  return history.map((msg) => ({
+    role: msg.role === 'ai' ? 'assistant' : 'user',
+    content: msg.content,
+  }));
+}
+
+/**
+ * Sends a chat completion request to Groq and returns the raw message content string.
+ */
+async function callGroq(
+  messages: { role: string; content: string }[],
+  options: { json?: boolean; temperature?: number } = {}
+): Promise<string> {
+  const apiKey = getApiKey();
+  const { json = false, temperature = 0.7 } = options;
+
+  const response = await fetch(getBaseUrl(), {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: MODEL,
+      messages,
+      temperature,
+      ...(json ? { response_format: { type: 'json_object' } } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Groq API Error: ${response.status} ${response.statusText} ${errorText}`);
   }
-  
-  return contents;
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || '';
 }
 
 /**
@@ -43,7 +61,7 @@ function buildPartnerSystemPrompt(
   // Read from the explicit argument first, fallback to the attached property, default to yoruba
   const activeLang = language || scenario?.language || 'yoruba';
   const langDisplay = activeLang.toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
-  
+
   let structuralInstruction = '';
   switch (proficiencyLevel) {
     case 'beginner':
@@ -71,22 +89,22 @@ function buildPartnerSystemPrompt(
 
   return `
     You are an immersive, interactive language-learning AI partner roleplaying a specific persona.
-    
+
     CRITICAL CONTEXT:
     - Target Language to Speak: ${langDisplay}
     - User Proficiency Level: ${proficiencyLevel.toUpperCase()}
     - Your Assigned Character Role: ${scenario?.aiRole || 'Conversation Partner'}
     - Scenario Setting/Context: ${scenario?.description || 'General Conversation'}
     - Starter Prompt Context: "${scenario?.starterPrompt || ''}"
-    
+
     ROLEPLAY BEHAVIOR RULES:
     1. Stay 100% in character as "${scenario?.aiRole || 'Conversation Partner'}". Never break character to say "As an AI..." or "Welcome to this lesson...".
     2. Do not offer explicit grammar corrections or structured feedback in the middle of the chat flow. Act exactly like a real person would in this scenario.
     3. Keep your response relevant to the conversational thread.
-    
+
     LEVEL-SPECIFIC CONSTAINTS:
     ${structuralInstruction}
-    
+
     OUTPUT FORMAT REQUIREMENTS:
     Return your response strictly as a JSON object with a single "reply" string key. Do not output anything outside the JSON structure.
     Example: { "reply": "Pleased to meet you!" }
@@ -103,44 +121,18 @@ export async function getPartnerResponse(
   userMessage: string,
   language?: string
 ) {
-  const apiKey = getApiKey();
   const activeLang = language || scenario?.language || 'yoruba';
   const systemPrompt = buildPartnerSystemPrompt(scenario, proficiencyLevel, activeLang);
 
-  // Map application message roles to Gemini content structure
-  const formattedContents = formatGeminiHistory(conversationHistory);
-
-  // Append latest turn
-  if (formattedContents.length > 0 && formattedContents[formattedContents.length - 1].role === 'user') {
-    formattedContents[formattedContents.length - 1].parts[0].text += '\n\n' + userMessage;
-  } else {
-    formattedContents.push({
-      role: 'user',
-      parts: [{ text: userMessage }],
-    });
-  }
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...formatGroqHistory(conversationHistory),
+    { role: 'user', content: userMessage },
+  ];
 
   try {
-    const response = await fetch(`${getBaseUrl()}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: formattedContents,
-        systemInstruction: {
-          parts: [{ text: systemPrompt }],
-        },
-        generationConfig: {
-          responseMimeType: 'application/json',
-          temperature: 0.7,
-        },
-      }),
-    });
-
-    if (!response.ok) throw new Error(`Gemini API Error: ${response.statusText}`);
-
-    const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    const parsed = JSON.parse(rawText);
+    const rawText = await callGroq(messages, { json: true, temperature: 0.7 });
+    const parsed = JSON.parse(rawText || '{}');
     const replyText = parsed.reply || '';
 
     // Handle background translation execution seamlessly
@@ -169,23 +161,22 @@ export async function getReplySuggestions(
   lastAiMessage: string,
   language?: string
 ): Promise<{ suggestions: ReplySuggestion[] }> {
-  const apiKey = getApiKey();
   const activeLang = language || scenario?.language || 'yoruba';
   const langDisplay = activeLang.toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
 
   const systemPrompt = `
     You are an expert ${langDisplay} language learning coach.
     Analyze the last message sent by the AI companion: "${lastAiMessage}"
-    
+
     Generate exactly 3 alternative options for how the user could respond next.
     Tailor these options precisely to a user at the "${proficiencyLevel}" level.
-    
+
     OUTPUT FORMAT REQUIREMENTS:
     Return a JSON object containing a "suggestions" array. Each item must have:
     - "text": The response variant written completely in ${langDisplay}.
     - "translation": The English meaning.
     - "label": A brief situational hint describing the intent/tone (e.g., "Polite Agreement", "Inquire further", "Express Surprise").
-    
+
     Example Schema:
     {
       "suggestions": [
@@ -194,36 +185,17 @@ export async function getReplySuggestions(
     }
   `.trim();
 
-  const formattedContents = formatGeminiHistory(conversationHistory);
-
   const suggestionPrompt = `Based on the conversation above, generate 3 alternative options for how the user could respond next to your last message: "${lastAiMessage}"`;
 
-  if (formattedContents.length > 0 && formattedContents[formattedContents.length - 1].role === 'user') {
-    formattedContents[formattedContents.length - 1].parts[0].text += '\n\n' + suggestionPrompt;
-  } else {
-    formattedContents.push({ role: 'user', parts: [{ text: suggestionPrompt }] });
-  }
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...formatGroqHistory(conversationHistory),
+    { role: 'user', content: suggestionPrompt },
+  ];
 
   try {
-    const response = await fetch(`${getBaseUrl()}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: formattedContents,
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.6 },
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Gemini Suggestions API Error:', response.status, errorText);
-      throw new Error(`Failed to fetch suggestions from Gemini: ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{"suggestions":[]}';
-    return JSON.parse(rawText);
+    const rawText = await callGroq(messages, { json: true, temperature: 0.6 });
+    return JSON.parse(rawText || '{"suggestions":[]}');
   } catch (error) {
     console.error('Error generating suggestions:', error);
     return { suggestions: [] };
@@ -238,7 +210,6 @@ export async function evaluateConversation(
   conversationHistory: Message[],
   language?: string
 ): Promise<Evaluation> {
-  const apiKey = getApiKey();
   const activeLang = language || scenario?.language || 'yoruba';
   const langDisplay = activeLang.toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
 
@@ -246,7 +217,7 @@ export async function evaluateConversation(
     You are an expert ${langDisplay} language evaluator.
     Review the following conversation between a user learning ${langDisplay} and an AI.
     Provide a constructive evaluation of the user's performance.
-    
+
     OUTPUT FORMAT REQUIREMENTS:
     Return exactly one JSON object with the following schema:
     {
@@ -261,32 +232,15 @@ export async function evaluateConversation(
     }
   `.trim();
 
-  const formattedContents = formatGeminiHistory(conversationHistory);
-  
-  // Enforce rule: evaluate requests shouldn't end on 'model' if we can help it, 
-  // but if we are just evaluating the history, it's safer to ensure we append the evaluation ask as a user.
-  if (formattedContents.length === 0 || formattedContents[formattedContents.length - 1].role === 'model') {
-    formattedContents.push({ role: 'user', parts: [{ text: 'Please evaluate the conversation above.' }] });
-  } else {
-    formattedContents[formattedContents.length - 1].parts[0].text += '\n\nPlease evaluate the conversation above.';
-  }
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...formatGroqHistory(conversationHistory),
+    { role: 'user', content: 'Please evaluate the conversation above.' },
+  ];
 
   try {
-    const response = await fetch(`${getBaseUrl()}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: formattedContents,
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        generationConfig: { responseMimeType: 'application/json', temperature: 0.3 },
-      }),
-    });
-
-    if (!response.ok) throw new Error('Failed to evaluate conversation');
-
-    const data = await response.json();
-    const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    return JSON.parse(rawText);
+    const rawText = await callGroq(messages, { json: true, temperature: 0.3 });
+    return JSON.parse(rawText || '{}');
   } catch (error) {
     console.error('Error evaluating conversation:', error);
     throw error;
@@ -294,27 +248,66 @@ export async function evaluateConversation(
 }
 
 /**
+ * Assesses whether the user's current proficiency level still fits their performance,
+ * recommending a level adjustment when the conversation suggests otherwise.
+ */
+export async function assessProficiency(
+  conversationHistory: Message[],
+  proficiencyLevel: ProficiencyLevel,
+  language?: string
+): Promise<ProficiencyAssessment> {
+  const langDisplay = (language || '').toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
+
+  const systemPrompt = `
+    You are an expert ${langDisplay} language proficiency assessor.
+    The user is currently set at the "${proficiencyLevel}" level.
+    Review the following conversation and judge whether this level still fits the user's
+    demonstrated ability, or whether a different level would serve them better.
+
+    OUTPUT FORMAT REQUIREMENTS:
+    Return exactly one JSON object with the following schema:
+    {
+      "recommendedLevel": "beginner" | "intermediate" | "advanced",
+      "rationale": "string (a brief, encouraging explanation for the recommendation)",
+      "confidence": "low" | "high"
+    }
+
+    Only set "confidence" to "high" when the conversation gives clear, consistent evidence
+    that a different level would suit the user better. Otherwise use "low".
+  `.trim();
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    ...formatGroqHistory(conversationHistory),
+    { role: 'user', content: 'Please assess my proficiency level based on the conversation above.' },
+  ];
+
+  try {
+    const rawText = await callGroq(messages, { json: true, temperature: 0.3 });
+    return JSON.parse(rawText || `{"recommendedLevel":"${proficiencyLevel}","rationale":"","confidence":"low"}`);
+  } catch (error) {
+    console.error('Error assessing proficiency:', error);
+    return { recommendedLevel: proficiencyLevel, rationale: '', confidence: 'low' };
+  }
+}
+
+/**
  * Utility translation engine internal module.
  */
 async function translateToEnglish(text: string, sourceLanguage: string): Promise<string> {
-  const apiKey = getApiKey();
   if (!text) return '';
 
   const systemPrompt = `You are a professional linguist. Translate the provided text from ${sourceLanguage} cleanly into natural English text. Return only the flat string translation.`;
 
   try {
-    const response = await fetch(`${getBaseUrl()}?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text }] }],
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-      }),
-    });
-
-    if (!response.ok) return '';
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || '';
+    const rawText = await callGroq(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: text },
+      ],
+      { json: false, temperature: 0.3 }
+    );
+    return rawText.trim();
   } catch {
     return '';
   }

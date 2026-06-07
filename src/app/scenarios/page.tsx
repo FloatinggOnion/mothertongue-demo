@@ -3,11 +3,20 @@
 import { scenarios } from '@/config/scenarios';
 import { ScenarioCard } from '@/components';
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 
 /* Hallmark · genre: editorial · macrostructure: Scenarios Grid · design-system: design.md */
 
 export default function ScenariosPage() {
+  return (
+    <Suspense>
+      <ScenariosContent />
+    </Suspense>
+  );
+}
+
+function ScenariosContent() {
   const searchParams = useSearchParams();
   
   // Extract and normalize the selected language parameter ('yoruba' | 'hausa')

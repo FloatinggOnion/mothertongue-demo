@@ -27,7 +27,7 @@ export const metadata: Metadata = {
     "Nigerian",
     "speaking practice",
     "AI",
-    "Gemini",
+    "Groq",
   ],
   authors: [{ name: "Mothertongue Team" }],
   openGraph: {

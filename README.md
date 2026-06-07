@@ -1,15 +1,15 @@
 # Mothertongue: An Investigation into AI-Mediated Spoken Language Acquisition
 
-**Project Status**: Experimental MVP / Hackathon Submission (Gemini 3)
+**Project Status**: Experimental MVP / Hackathon Submission (Groq)
 **Focus**: Low-resource languages (Yorùbá), Output Hypothesis, Cultural Alignment
 
 ---
 
 ## 📑 Abstract
 
-Mothertongue investigates the efficacy of Large Multimodal Models (LMMs) as real-time conversational partners for language acquisition in low-resource contexts. Specifically, we explore how **Gemini 3** can simulate culturally grounded immersion environments for Yorùbá learners, bridging the gap between passive understanding and active speaking fluency.
+Mothertongue investigates the efficacy of Large Language Models (LLMs) as real-time conversational partners for language acquisition in low-resource contexts. Specifically, we explore how **Groq's Llama 3.3** can simulate culturally grounded immersion environments for Yorùbá learners, bridging the gap between passive understanding and active speaking fluency.
 
-This project serves as both a functional MVP for the **Gemini 3 Hackathon** and a proof-of-concept for scalable, culturally-aware AI tutoring systems.
+This project serves as both a functional MVP for the hackathon and a proof-of-concept for scalable, culturally-aware AI tutoring systems.
 
 ---
 
@@ -34,7 +34,7 @@ To enable this immersion, we architected a low-latency, resilient voice pipeline
 ### A. Dual-Engine Speech Recognition
 We developed a novel hybrid approach to ensure accessibility across diverse hardware/browsers:
 1.  **Primary**: **Native Web Speech API** (Edge/Chrome) for zero-latency, on-device transcription.
-2.  **Fallback**: **Server-Side Gemini 3 Transcription**. If the native API fails (e.g., on Arc, Brave, or unreliable networks), the system automatically captures audio via `MediaRecorder` and pipelines it to Gemini 3 for high-fidelity transcription.
+2.  **Fallback**: **Server-Side Speech-to-Text Transcription** (Google Cloud Speech-to-Text). If the native API fails (e.g., on Arc, Brave, or unreliable networks), the system automatically captures audio via `MediaRecorder` and pipelines it to the server for high-fidelity transcription.
 
 ### B. Gender-Specific Synthesis
 To test the impact of identity on learner engagement, the system dynamically switches TTS voices:
@@ -49,13 +49,13 @@ To test the impact of identity on learner engagement, the system dynamically swi
 As of version 0.1.0, the following capabilities have been validated:
 
 ### ✅ Experimental Successes
-*   **Code-Switching Fluency**: Gemini 3 successfully maintains mixed-language conversations (Yorùbá + English) without hallucinating incorrect grammar, mirroring natural Lagosian speech patterns.
+*   **Code-Switching Fluency**: The model successfully maintains mixed-language conversations (Yorùbá + English) without hallucinating incorrect grammar, mirroring natural Lagosian speech patterns.
 *   **Silent Evaluation**: The "Shadow Evaluator" pattern (running a parallel evaluation agent) provides detailed feedback on fluency and confidence without interrupting the flow of conversation.
 *   **Fallback Reliability**: The dual-engine speech system successfully handles browser incompatibility, ensuring a consistent testing environment.
 
 ### ⚠️ Limitations & Variables
 *   **Latency Overhead**: Server-side transcription adds ~1.5s latency compared to native speech. Future work involves streaming audio to reduce this "turn-taking gap."
-*   **Accent Recognition**: Native browser STT struggles with heavy Nigerian accents in mixed-language sentences. Gemini's server-side transcription shows significantly higher accuracy for Yorùbá terms.
+*   **Accent Recognition**: Native browser STT struggles with heavy Nigerian accents in mixed-language sentences. Server-side transcription shows significantly higher accuracy for Yorùbá terms.
 
 ---
 
@@ -73,7 +73,7 @@ This repository contains the source code for the Mothertongue experimental platf
 
 ### Prerequisites
 *   Node.js 18+
-*   Gemini API Key
+*   Groq API Key
 *   ElevenLabs API Key
 
 ### Installation
@@ -89,7 +89,7 @@ npm install
 
 # 3. Configure Environment
 # Create .env.local with your keys:
-GEMINI_API_KEY=your_key
+GROQ_API_KEY=your_key
 ELEVENLABS_API_KEY=your_key
 ELEVENLABS_VOICE_ID_MALE=your_male_voice_id
 ELEVENLABS_VOICE_ID_FEMALE=your_female_voice_id
@@ -104,4 +104,4 @@ Visit `http://localhost:3000` to interact with the system.
 
 ---
 
-*Built with Next.js 15, Tailwind CSS, and Google Gemini 3.*
+*Built with Next.js 15, Tailwind CSS, and Groq (Llama 3.3).*
