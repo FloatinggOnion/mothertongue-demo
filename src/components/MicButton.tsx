@@ -1,5 +1,7 @@
 'use client';
 
+import { useRef } from 'react';
+
 interface MicButtonProps {
   isListening: boolean;
   isSpeaking: boolean;
@@ -16,25 +18,72 @@ export function MicButton({
   onRelease,
 }: MicButtonProps) {
   const isDisabled = isSpeaking || isLoading;
+  // Track whether the press came from mouse/touch so onClick doesn't double-fire
+  const pressedRef = useRef(false);
+
+  const handleMouseDown = () => {
+    if (isDisabled) return;
+    pressedRef.current = true;
+    if (!isListening) onPress();
+  };
+
+  const handleMouseUp = () => {
+    if (isDisabled) return;
+    if (isListening) onRelease();
+    pressedRef.current = false;
+  };
+
+  const handleMouseLeave = () => {
+    if (isDisabled) return;
+    if (isListening) {
+      onRelease();
+      pressedRef.current = false;
+    }
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (isDisabled) return;
+    pressedRef.current = true;
+    if (!isListening) onPress();
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    e.preventDefault();
+    if (isDisabled) return;
+    if (isListening) onRelease();
+    pressedRef.current = false;
+  };
+
+  // onClick only fires if mousedown/touchstart didn't already handle it
+  // This covers edge cases where pointer events don't fire properly
+  const handleClick = () => {
+    if (isDisabled || pressedRef.current) return;
+    if (isListening) {
+      onRelease();
+    } else {
+      onPress();
+    }
+  };
 
   return (
     <div className="flex flex-col items-center gap-3">
-      {/* Main mic button */}
       <button
-        onMouseDown={onPress}
-        onMouseUp={onRelease}
-        onMouseLeave={onRelease}
-        onTouchStart={onPress}
-        onTouchEnd={onRelease}
+        onMouseDown={handleMouseDown}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleClick}
         disabled={isDisabled}
         className={`
           relative w-20 h-20 rounded-full flex items-center justify-center
           transition-all duration-200 touch-none select-none
           ${
             isDisabled
-              ? 'bg-slate-700 cursor-not-allowed opacity-50'
+              ? 'bg-[#A89B8C] cursor-not-allowed opacity-50'
               : isListening
-                ? 'bg-gradient-to-r from-red-500 to-rose-500 scale-110 shadow-lg shadow-red-500/50'
+                ? 'bg-[#2C1810] scale-110 shadow-lg shadow-[#2C1810]/40'
                 : 'bg-[#C4622D] hover:scale-105 shadow-lg shadow-[#C4622D]/30'
           }
         `}
@@ -42,17 +91,17 @@ export function MicButton({
         {/* Pulse animation when listening */}
         {isListening && (
           <>
-            <div className="absolute inset-0 rounded-full bg-red-500/50 animate-ping" />
-            <div className="absolute inset-0 rounded-full bg-red-500/30 animate-pulse" />
+            <div className="absolute inset-0 rounded-full bg-[#2C1810]/50 animate-ping" />
+            <div className="absolute inset-0 rounded-full bg-[#2C1810]/30 animate-pulse" />
           </>
         )}
 
         {/* Loading spinner */}
         {isLoading ? (
-          <div className="w-8 h-8 border-3 border-white/30 border-t-white rounded-full animate-spin" />
+          <div className="w-8 h-8 border-2 border-[#F5F0E8]/30 border-t-[#F5F0E8] rounded-full animate-spin" />
         ) : (
           <svg
-            className="w-8 h-8 text-white relative z-10"
+            className="w-8 h-8 text-[#F5F0E8] relative z-10"
             fill="currentColor"
             viewBox="0 0 24 24"
           >
@@ -63,16 +112,16 @@ export function MicButton({
       </button>
 
       {/* Status text */}
-      <div className="text-sm text-slate-400">
+      <div className="font-ui text-[10px] uppercase tracking-widest text-[#A89B8C]">
         {isLoading ? (
           'Processing...'
         ) : isSpeaking ? (
           <span className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-emerald-400 rounded-full animate-pulse" />
-            AI is speaking...
+            <span className="w-1.5 h-1.5 bg-[#C4622D] rounded-full animate-pulse" />
+            Speaking...
           </span>
         ) : isListening ? (
-          <span className="text-red-400 font-medium">Release to send</span>
+          <span className="text-[#2C1810] font-medium">Tap to stop</span>
         ) : (
           'Hold to speak'
         )}

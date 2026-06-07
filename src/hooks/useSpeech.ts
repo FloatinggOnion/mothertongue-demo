@@ -92,7 +92,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
         }
       };
 
-      mediaRecorder.start();
+      mediaRecorder.start(250);
       setIsListening(true);
       setError(null);
     } catch (err: unknown) {
