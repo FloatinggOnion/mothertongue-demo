@@ -89,36 +89,88 @@ You need to know where to drop and how much to pay.`,
   {
     id: 'hausa-market-haggling',
     language: 'hausa',
-    title: 'Market Haggling',
-    titleYoruba: 'Ciniki a Kasuwa',
-    description: 'Bargain for goods at a northern market',
-    icon: '🛒',
-    context: `You are at Malam Bello's spice and grain stall in Kurmi Market, Kano.
-He sells onions, peppers, rice, and various spices.
-Friendly bargaining is an essential part of the transaction.
-The market environment is energetic and bustling.`,
-    aiRole: 'Malam Bello, a polite but firm Hausa trader',
-    aiRoleYoruba: 'Malam Bello, mai shago mai bincike',
-    starterPrompt: 'Sannu da zuwa! Shigo ciki. Kana son sayan albasa ko shinkafa yau? Akwai kaya masu kyau sosai!',
+    title: 'Kasuwar Kano',
+    titleYoruba: 'Kasuwanci a Kano',
+    description: 'Bargain for spices and fabric at Kano central market',
+    icon: '🌶️',
+    context: `You are at Kurmi Market in Kano, one of the oldest markets in West Africa.
+You are buying spices and fabric from Hajiya Binta, an experienced trader.
+Hausa markets are lively and bargaining is expected and respected.
+Greet properly before any transaction — it matters deeply here.`,
+    aiRole: 'Hajiya Binta, a respected Kano market trader',
+    aiRoleYoruba: 'Hajiya Binta, mai sayarwa a kasuwa',
+    starterPrompt: 'Sannu da zuwa! Yaya lafiya? I get best tummeric and pepper today, just fresh. Mene ne kake nema?',
     difficulty: 'beginner',
-    gender: 'male',
+    gender: 'female',
   },
   {
     id: 'hausa-greeting-elders',
     language: 'hausa',
     title: 'Greeting Elders',
-    titleYoruba: 'Gaishe da Dattijai',
-    description: 'Practice respectful greetings and traditional etiquette',
-    icon: '🙏',
-    context: `You are visiting a respected family elder, Alhaji Ibrahim, at his home in Kaduna.
-Showing deep respect and using proper honorific structures is key in Hausa culture.
-The atmosphere is serene and formal.`,
-    aiRole: 'Alhaji Ibrahim, your dignified and welcoming uncle',
-    aiRoleYoruba: 'Alhaji Ibrahim, dattijo mai mutunci',
-    starterPrompt: 'Barka da rana, barka da zuwa. Ina kwana? Yaya iyali da mutanen gida?',
+    titleYoruba: 'Gaisuwa da Dattawa',
+    description: 'Learn proper Hausa greetings and show respect to elders',
+    icon: '🤲',
+    context: `You are visiting Malam Sule, an elder and family friend, at his home in Kaduna.
+He is sitting in the parlour after Asr prayer with some guests.
+Hausa greetings are layered and warm — asking after health, family and work.
+Respect and patience in conversation is deeply valued.`,
+    aiRole: 'Malam Sule, a wise and warm elder in Kaduna',
+    aiRoleYoruba: 'Malam Sule, tsohon mutum mai hikima',
+    starterPrompt: 'Sannu! Sannu da zuwa, zauna zauna. Yaya tafiya? Mun gode Allah da zuwan ka. Yaya iyali?',
     difficulty: 'beginner',
     gender: 'male',
-  }
+  },
+  {
+    id: 'hausa-restaurant',
+    language: 'hausa',
+    title: 'Ordering at a Buka',
+    titleYoruba: 'Yin Odar a Gidan Abinci',
+    description: 'Order a meal at a local Hausa restaurant',
+    icon: '🍖',
+    context: `You are at a popular local buka in Zaria run by Mama Rabi.
+The menu has tuwo shinkafa, miyan kuka, suya, kilishi and fura da nono.
+The place is warm and familiar — regulars are treated like family.
+Knowing food names in Hausa makes the experience richer.`,
+    aiRole: 'Mama Rabi, a warm and proud Hausa buka owner',
+    aiRoleYoruba: 'Mama Rabi, mai gidan abinci a Zaria',
+    starterPrompt: 'Sannu da zuwa! Yau muna da tuwo shinkafa da miyan kuka mai dadi sosai. Kuma suya na fresh! Me kake so?',
+    difficulty: 'intermediate',
+    gender: 'female',
+  },
+  {
+    id: 'hausa-friends',
+    language: 'hausa',
+    title: 'Chatting with Friends',
+    titleYoruba: 'Hira da Abokai',
+    description: 'Have a relaxed conversation with Hausa friends',
+    icon: '💬',
+    context: `You are relaxing with your friend Aminu at a tea spot in Kano after work.
+Topics flow freely — football, music, politics, weekend plans.
+Young Hausa speakers naturally mix Hausa, English and Pidgin.
+The mood is light, easy and familiar.`,
+    aiRole: 'Aminu, your easy-going friend from Kano',
+    aiRoleYoruba: 'Aminu, abokinka daga Kano',
+    starterPrompt: 'Haba! Don land at last. Sit down make we drink shayi. How work today? You look tired o — mene ne ya faru?',
+    difficulty: 'intermediate',
+    gender: 'male',
+  },
+  {
+    id: 'hausa-negotiation',
+    language: 'hausa',
+    title: 'Business Negotiation',
+    titleYoruba: 'Tattaunawa kan Kasuwanci',
+    description: 'Navigate a formal business deal in Hausa',
+    icon: '🤝',
+    context: `You are meeting Alhaji Garba, a senior businessman in Kano, to discuss a supply deal.
+The meeting is semi-formal — tea is served, pleasantries exchanged before business.
+Hausa business culture values patience, indirectness and relationship above speed.
+Rushing or being too direct is considered disrespectful.`,
+    aiRole: 'Alhaji Garba, a senior Kano businessman',
+    aiRoleYoruba: 'Alhaji Garba, babban dan kasuwa a Kano',
+    starterPrompt: "Sannu, sannu. Zauna, a kawo shayi. Ba a yi hanzari a cikin kasuwanci ba. Yaya iyali da aiki? Mu yi hira kafin mu shiga cikin al'amura.",
+    difficulty: 'advanced',
+    gender: 'male',
+  },
 ];
 
 export function getScenarioById(id: string): Scenario | undefined {

@@ -1,10 +1,34 @@
+'use client';
+
+import { useState } from 'react';
 import { scenarios } from '@/config/scenarios';
 import { ScenarioCard } from '@/components';
 import Link from 'next/link';
 
 /* Hallmark · genre: editorial · macrostructure: Editorial Split · design-system: design.md */
 
+const content = {
+  yoruba: {
+    proverb: `"Àjàlórá ni orí, kì í ṣe àjàlórá ni ẹsẹ̀."`,
+    proverbTranslation: "The head is a treasure, not the feet.",
+    heading: "Your language is your inheritance.",
+    body: "Fluency is built lesson by lesson, memory by memory, story by story. Practice your native tongue with an AI partner who understands the nuance of heritage and culture.",
+    ctaText: "Practice Yoruba",
+    ctaLink: "/scenarios?lang=yoruba"
+  },
+  hausa: {
+    proverb: `"Sannu da zuwa"`,
+    proverbTranslation: "Welcome, you have arrived.",
+    heading: "Yaren ka shine gadonka.",
+    body: "Ƙwarewa ana gina ta darasi bayan darasi, ƙwaƙwalwa bayan ƙwaƙwalwa. Practice Hausa with an AI partner who understands northern Nigerian culture.",
+    ctaText: "Practice Hausa",
+    ctaLink: "/scenarios?lang=hausa"
+  }
+};
+
 export default function Home() {
+  const [selectedLang, setSelectedLang] = useState<'yoruba' | 'hausa'>('yoruba');
+
   return (
     <main className="relative min-h-screen selection:bg-accent/30">
       {/* Global floating rosettes */}
@@ -36,31 +60,24 @@ export default function Home() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
                 <div className="lg:col-span-7 xl:col-span-8 max-w-[75ch] relative z-10">
                   <blockquote className="font-display italic text-text-secondary text-lg md:text-xl mb-8 pl-6 border-l-2 border-accent">
-                    "Àjàlórá ni orí, kì í ṣe àjàlórá ni ẹsẹ̀."
-                    <cite className="block not-italic text-sm mt-2 text-text-secondary opacity-80">— The head is a treasure, not the feet.</cite>
+                    {content[selectedLang].proverb}
+                    <cite className="block not-italic text-sm mt-2 text-text-secondary opacity-80">— {content[selectedLang].proverbTranslation}</cite>
                   </blockquote>
                   
                   <h1 className="font-display text-text text-hero leading-[1.1] mb-8 tracking-tight animate-fade-in">
-                    Your language is your inheritance.
+                    {content[selectedLang].heading}
                   </h1>
                   
                   <p className="font-body text-text-secondary text-body-lg leading-prose mb-12 max-w-[55ch]">
-                    Fluency is built lesson by lesson, memory by memory, story by story. 
-                    Practice your native tongue with an AI partner who understands the nuance of heritage and culture.
+                    {content[selectedLang].body}
                   </p>
 
                   <div className="flex flex-col sm:flex-row gap-6">
                     <Link 
-                      href="/scenarios?lang=yoruba" 
+                      href={content[selectedLang].ctaLink} 
                       className="inline-flex items-center justify-center px-8 py-3 bg-accent text-text-inverse font-ui text-caption font-medium rounded-md hover:bg-[#A84E22] transition-colors duration-fast ease-out"
                     >
-                      Practice Yoruba
-                    </Link>
-                    <Link 
-                      href="/scenarios?lang=hausa" 
-                      className="inline-flex items-center justify-center px-8 py-3 border-1.5 border-accent text-accent font-ui text-caption font-medium rounded-md hover:bg-accent/5 transition-colors duration-fast ease-out"
-                    >
-                      Practice Hausa
+                      {content[selectedLang].ctaText}
                     </Link>
                   </div>
                 </div>
@@ -71,22 +88,32 @@ export default function Home() {
                   
                   <div className="flex flex-col gap-12">
                     {/* 01 Yoruba */}
-                    <Link href="/scenarios?lang=yoruba" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
+                    <button 
+                      onClick={() => setSelectedLang('yoruba')} 
+                      className={`flex flex-col gap-1 text-left text-accent hover:opacity-70 transition-opacity w-full ${
+                        selectedLang === 'yoruba' ? 'opacity-100' : 'opacity-40'
+                      }`}
+                    >
                       <div className="flex items-baseline gap-4">
                         <span className="font-display text-2xl opacity-40 select-none">01</span>
                         <span className="font-display text-3xl">Yoruba</span>
                       </div>
                       <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">Western Nigeria</span>
-                    </Link>
+                    </button>
 
                     {/* 02 Hausa */}
-                    <Link href="/scenarios?lang=hausa" className="flex flex-col gap-1 text-accent hover:opacity-70 transition-opacity">
+                    <button 
+                      onClick={() => setSelectedLang('hausa')} 
+                      className={`flex flex-col gap-1 text-left text-accent hover:opacity-70 transition-opacity w-full ${
+                        selectedLang === 'hausa' ? 'opacity-100' : 'opacity-40'
+                      }`}
+                    >
                       <div className="flex items-baseline gap-4">
                         <span className="font-display text-2xl opacity-40 select-none">02</span>
                         <span className="font-display text-3xl">Hausa</span>
                       </div>
                       <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">Northern Nigeria</span>
-                    </Link>
+                    </button>
 
                     {/* 03 Igbo */}
                     <div className="flex flex-col gap-1 text-text-secondary opacity-40 cursor-not-allowed select-none" title="Coming Soon">
@@ -95,6 +122,7 @@ export default function Home() {
                         <span className="font-display text-3xl">Igbo</span>
                       </div>
                       <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">South-East Nigeria</span>
+                      <span className="font-ui text-[9px] uppercase tracking-widest text-accent opacity-60 ml-10">Coming Soon</span>
                     </div>
                   </div>
                 </aside>
