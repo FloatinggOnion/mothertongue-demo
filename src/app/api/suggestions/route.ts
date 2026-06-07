@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getReplySuggestions } from '@/services/gemini';
+import { getReplySuggestions } from '@/services/groq';
 import { getScenarioById } from '@/config/scenarios';
 import { SuggestionsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       language: fallbackData.language || 'yoruba'
     };
 
-    // Get dynamic speech variations from Gemini based on the selected language
+    // Get dynamic speech variations from Groq based on the selected language
     const response = await getReplySuggestions(
       dynamicScenario,
       proficiencyLevel,

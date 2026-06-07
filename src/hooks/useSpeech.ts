@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-// --- Speech Recognition Hook (Server-side Gemini Fallback) ---
+// --- Speech Recognition Hook (Server-side Speech-to-Text Fallback) ---
 
 interface UseSpeechRecognitionOptions {
   lang?: string;

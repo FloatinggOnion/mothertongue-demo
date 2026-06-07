@@ -70,13 +70,6 @@ export interface ReplySuggestion {
   translation: string;
 }
 
-export interface GeminiResponse {
-  reply: string;
-  translation: string;
-  suggestions?: ReplySuggestion[];
-  shouldEndDrill?: boolean;
-}
-
 export interface SilentEvaluation {
   meaningUnderstood: boolean;
   fluencyNote?: string;

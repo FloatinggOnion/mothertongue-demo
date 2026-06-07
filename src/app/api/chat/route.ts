@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPartnerResponse } from '@/services/gemini';
+import { getPartnerResponse } from '@/services/groq';
 import { getScenarioById } from '@/config/scenarios';
 import { ChatSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
