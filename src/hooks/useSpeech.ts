@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 
-// --- Speech Recognition Hook (Server-side Gemini Fallback) ---
+// --- Speech Recognition Hook ---
 
 interface UseSpeechRecognitionOptions {
   lang?: string;
@@ -19,7 +19,7 @@ interface UseSpeechRecognitionReturn {
   error: string | null;
 }
 
-// 🌟 Added options parameter to handle dynamic language locale passing
+// Added options parameter to handle dynamic language locale passing
 export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -29,7 +29,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
-  
+
   // Keep a stable ref to options so it doesn't break useCallback caches
   const optionsRef = useRef(options);
   useEffect(() => {
@@ -67,7 +67,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
           setInterimTranscript('Processing audio...');
           const formData = new FormData();
           formData.append('audio', blob);
-          
+
           // Append explicit language string so backend routing correctly resolves 'hausa' or 'yoruba'
           const languageCode = optionsRef.current?.lang?.startsWith('ha') ? 'hausa' : 'yoruba';
           formData.append('language', languageCode);
@@ -92,7 +92,8 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
         }
       };
 
-      mediaRecorder.start();
+      // Collect data every 250ms so the WebM file is complete and valid when sent
+      mediaRecorder.start(250);
       setIsListening(true);
       setError(null);
     } catch (err: unknown) {
@@ -108,6 +109,8 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
 
   const stopListening = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+      // Flush any remaining buffered audio before stopping
+      mediaRecorderRef.current.requestData();
       mediaRecorderRef.current.stop();
     }
   }, []);
@@ -130,6 +133,7 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
 }
 
 // --- Speech Synthesis Hook ---
+
 interface UseSpeechSynthesisOptions {
   lang?: string;
 }
@@ -149,7 +153,7 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentObjectUrlRef = useRef<string | null>(null);
-  
+
   // Track whether we're in the middle of a server TTS request
   // so we can abort if stop() is called before it completes
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -281,7 +285,7 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
         setError('Speech not supported on this device');
       }
     }
-  }, [stopServerAudio, stopBrowserSpeech]);
+  }, [stopServerAudio, stopBrowserSpeech, options?.lang]);
 
   const stop = useCallback(() => {
     stopServerAudio();

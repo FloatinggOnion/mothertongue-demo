@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { AssessLevelSchema, getZodErrorMessage } from '@/lib/zod-schemas';
-import { assessProficiency } from '@/services/gemini';
+import { assessProficiency } from '@/services/groq';
 
 export async function POST(req: NextRequest) {
   try {

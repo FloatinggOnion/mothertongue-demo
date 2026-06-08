@@ -4,7 +4,7 @@ import { v2, protos } from '@google-cloud/speech';
 type SpeechResult = protos.google.cloud.speech.v2.SpeechRecognitionResult;
 
 const REGION = 'us';
-const MODAL_BASE_URL = process.env.MODAL_STT_HAUSA_URL;
+const MODAL_BASE_URL = process.env.HAUSA_MODAL_STT_URL;
 
 // Initialize Google Cloud Speech-to-Text v2 Client
 const speechClient = new v2.SpeechClient({
