@@ -121,9 +121,7 @@ export default function DrillPage() {
       setMessages([initialMessage]);
 
       // Speak the initial message
-      setTimeout(() => {
-        speak(scenario.starterPrompt, scenario.gender);
-      }, 500);
+      speak(scenario.starterPrompt, scenario.gender);
     }
   }, [scenario, messages.length, speak]);
 
