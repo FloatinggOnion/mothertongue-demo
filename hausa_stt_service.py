@@ -45,11 +45,15 @@ class TranscriberEngine:
         from pydub import AudioSegment
         import io
 
+        print(f"[GPU] Audio received: {len(audio_bytes)} bytes")
+
         # Convert any audio format (webm, mp4, ogg, wav) to WAV using pydub
         try:
             audio_segment = AudioSegment.from_file(BytesIO(audio_bytes))
         except Exception as e:
             raise ValueError(f"Could not decode audio format: {e}")
+
+        print(f"[GPU] Raw audio: channels={audio_segment.channels}, frame_rate={audio_segment.frame_rate}, duration={len(audio_segment)}ms")
 
         # Convert to mono 16kHz WAV — required by Wav2Vec2
         audio_segment = audio_segment.set_channels(1).set_frame_rate(16000)
@@ -58,6 +62,15 @@ class TranscriberEngine:
         wav_buffer.seek(0)
 
         audio_data, samplerate = sf.read(wav_buffer)
+
+        print(f"[GPU] After conversion: samplerate={samplerate}, shape={audio_data.shape}, max_amplitude={np.max(np.abs(audio_data)):.4f}")
+
+        # Check if audio is too short or silent
+        if len(audio_data) < 1600:  # less than 0.1 seconds at 16kHz
+            raise ValueError(f"Audio too short: {len(audio_data)} samples ({len(audio_data)/16000:.2f}s)")
+
+        if np.max(np.abs(audio_data)) < 0.001:
+            raise ValueError("Audio appears to be silent — no voice detected")
 
         inputs = self.processor(
             audio_data,
@@ -69,7 +82,9 @@ class TranscriberEngine:
             outputs = self.model(**inputs).logits
 
         predicted_ids = torch.argmax(outputs, dim=-1)[0]
-        return self.processor.decode(predicted_ids)
+        result = self.processor.decode(predicted_ids)
+        print(f"[GPU] Transcription result: '{result}'")
+        return result
 
 
 # 2. Asynchronous Web Gateway Router

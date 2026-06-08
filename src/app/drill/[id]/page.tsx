@@ -270,32 +270,30 @@ export default function DrillPage() {
   }, [startListening]);
 
   const handleMicRelease = useCallback(async () => {
-    stopListening();
+  stopListening();
 
-    // Calculate speaking time
-    if (speakingStartTime) {
-      const duration = (Date.now() - speakingStartTime) / 1000;
-      setTotalSpeakingTime((prev) => prev + duration);
-      setSpeakingStartTime(null);
-    }
+  if (speakingStartTime) {
+    const duration = (Date.now() - speakingStartTime) / 1000;
+    setTotalSpeakingTime((prev) => prev + duration);
+    setSpeakingStartTime(null);
+  }
 
-    const userText = await new Promise<string>((resolve) => {
-      transcriptReadyResolveRef.current = resolve;
-      // Safety timeout
-      setTimeout(() => {
-        if (transcriptReadyResolveRef.current === resolve) {
-          transcriptReadyResolveRef.current = null;
-          resolve('');
-        }
-      }, 10000);
-    });
+  const userText = await new Promise<string>((resolve) => {
+    transcriptReadyResolveRef.current = resolve;
+    setTimeout(() => {
+      if (transcriptReadyResolveRef.current === resolve) {
+        transcriptReadyResolveRef.current = null;
+        resolve(transcript);
+      }
+    }, 60000);
+  });
 
-    resetTranscript();
+  resetTranscript();
 
-    if (userText.trim()) {
-      await sendMessage(userText.trim());
-    }
-  }, [stopListening, speakingStartTime, resetTranscript, sendMessage]);
+  if (userText.trim()) {
+    await sendMessage(userText.trim());
+  }
+}, [stopListening, speakingStartTime, resetTranscript, sendMessage, transcript]);
 
   const handleTextSubmit = async (e: FormEvent) => {
     e.preventDefault();
