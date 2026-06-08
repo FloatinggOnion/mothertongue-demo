@@ -2,7 +2,6 @@
 
 import { Scenario } from '@/types';
 import Link from 'next/link';
-
 interface ScenarioCardProps {
   scenario: Scenario;
 }
