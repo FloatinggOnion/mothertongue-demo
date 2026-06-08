@@ -70,10 +70,91 @@ export default function DrillPage() {
 
   // Refs
   const conversationRef = useRef<HTMLDivElement>(null);
-  const transcriptReadyResolveRef = useRef<((text: string) => void) | null>(null);
-  const processingStartedRef = useRef(false);
 
-  // Speech hooks (Passing dynamic BCP-47 locale config directly to initialization)
+  // Speech synthesis hook declared first so variable references are bound inside memory grid
+  const { speak, stop, isSpeaking, usingFallback } = useSpeechSynthesis({
+    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG'
+  });
+
+  // Send message to AI (Refactored to Functional Updates to capture current message arrays accurately)
+  const sendMessage = useCallback(async (userText: string) => {
+    if (!userText.trim() || !scenario) return;
+
+    setShowSuggestions(false);
+
+    const userMessage: Message = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: userText.trim(),
+      timestamp: Date.now(),
+    };
+    
+    let currentHistory: Message[] = [];
+    setMessages((prev) => {
+      currentHistory = [...prev, userMessage];
+      return currentHistory;
+    });
+    
+    setIsLoading(true);
+
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          scenarioId: scenario.id,
+          proficiencyLevel,
+          conversationHistory: currentHistory,
+          userMessage: userText.trim(),
+          language: scenario.language,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.reply) {
+        const aiMessage: Message = {
+          id: crypto.randomUUID(),
+          role: 'ai',
+          content: data.reply,
+          translation: data.translation,
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, aiMessage]);
+        speak(data.reply, scenario.gender);
+
+        // Adaptive difficulty: assess every 4 user turns
+        const userTurnCount = currentHistory.filter((m) => m.role === 'user').length;
+        if (!manualOverride && userTurnCount % 4 === 0 && userTurnCount > lastAssessedTurnCount) {
+          setLastAssessedTurnCount(userTurnCount);
+          fetch('/api/assess-level', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              proficiencyLevel,
+              conversationHistory: [...currentHistory, aiMessage],
+              language: scenario.language,
+            }),
+          })
+            .then((r) => r.json())
+            .then((assessment: ProficiencyAssessment) => {
+              if (assessment.recommendedLevel !== proficiencyLevel && assessment.confidence === 'high') {
+                setLevelSuggestion({ to: assessment.recommendedLevel, rationale: assessment.rationale });
+              }
+            })
+            .catch(() => { });
+        }
+      } else if (data.error) {
+        console.error('API error:', data.error);
+      }
+    } catch (error) {
+      console.error('Failed to get AI response:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [scenario, proficiencyLevel, manualOverride, lastAssessedTurnCount, speak]);
+
+  // Speech recognition hook registered to pipeline transcription text seamlessly
   const {
     isListening,
     transcript,
@@ -84,30 +165,19 @@ export default function DrillPage() {
     isSupported: sttSupported,
     error: sttError,
   } = useSpeechRecognition({
-    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG'
-  });
-
-  const { speak, stop, isSpeaking, usingFallback } = useSpeechSynthesis({
-    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG'
+    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG',
+    onTranscriptionComplete: (finalizedText) => {
+      if (finalizedText.trim()) {
+        sendMessage(finalizedText.trim());
+        resetTranscript();
+      }
+    }
   });
 
   useEffect(() => {
     const saved = loadSession(scenarioId)?.messages;
     if (saved) setMessages(saved);
   }, [scenarioId]);
-
-  // Watch interimTranscript to detect when STT server-side transcription completes.
-  useEffect(() => {
-    if (interimTranscript === 'Processing audio...') {
-      processingStartedRef.current = true;
-    } else if (interimTranscript === '' && processingStartedRef.current) {
-      processingStartedRef.current = false;
-      if (transcriptReadyResolveRef.current) {
-        transcriptReadyResolveRef.current(transcript);
-        transcriptReadyResolveRef.current = null;
-      }
-    }
-  }, [interimTranscript, transcript]);
 
   // Add initial AI message when scenario loads
   useEffect(() => {
@@ -175,7 +245,6 @@ export default function DrillPage() {
 
       const data = await response.json();
 
-      // Prevent flash if user suddenly starts talking
       if (!isListening && !isSpeaking && data.suggestions) {
         setSuggestions(data.suggestions);
         setShowSuggestions(true);
@@ -187,111 +256,21 @@ export default function DrillPage() {
     }
   };
 
-  // Send message to AI
-  const sendMessage = async (userText: string) => {
-    if (!userText.trim() || !scenario) return;
-
-    setShowSuggestions(false);
-
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: userText.trim(),
-      timestamp: Date.now(),
-    };
-    setMessages((prev) => [...prev, userMessage]);
-    setIsLoading(true);
-
-    try {
-      const response = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scenarioId: scenario.id,
-          proficiencyLevel,
-          conversationHistory: [...messages, userMessage],
-          userMessage: userText.trim(),
-          language: scenario.language,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (data.reply) {
-        const aiMessage: Message = {
-          id: crypto.randomUUID(),
-          role: 'ai',
-          content: data.reply,
-          translation: data.translation,
-          timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, aiMessage]);
-        speak(data.reply, scenario.gender);
-
-        // Adaptive difficulty: assess every 4 user turns
-        const userTurnCount = messages.filter((m) => m.role === 'user').length + 1;
-        if (!manualOverride && userTurnCount % 4 === 0 && userTurnCount > lastAssessedTurnCount) {
-          setLastAssessedTurnCount(userTurnCount);
-          fetch('/api/assess-level', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              proficiencyLevel,
-              conversationHistory: [...messages, userMessage],
-              language: scenario.language,
-            }),
-          })
-            .then((r) => r.json())
-            .then((assessment: ProficiencyAssessment) => {
-              if (assessment.recommendedLevel !== proficiencyLevel && assessment.confidence === 'high') {
-                setLevelSuggestion({ to: assessment.recommendedLevel, rationale: assessment.rationale });
-              }
-            })
-            .catch(() => { });
-        }
-      } else if (data.error) {
-        console.error('API error:', data.error);
-      }
-    } catch (error) {
-      console.error('Failed to get AI response:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   const handleMicPress = useCallback(() => {
     setShowSuggestions(false);
     setSpeakingStartTime(Date.now());
-    
-    // Call parameterless function safely since hook is configured on creation
     startListening();
   }, [startListening]);
 
-  const handleMicRelease = useCallback(async () => {
-  stopListening();
+  const handleMicRelease = useCallback(() => {
+    stopListening();
 
-  if (speakingStartTime) {
-    const duration = (Date.now() - speakingStartTime) / 1000;
-    setTotalSpeakingTime((prev) => prev + duration);
-    setSpeakingStartTime(null);
-  }
-
-  const userText = await new Promise<string>((resolve) => {
-    transcriptReadyResolveRef.current = resolve;
-    setTimeout(() => {
-      if (transcriptReadyResolveRef.current === resolve) {
-        transcriptReadyResolveRef.current = null;
-        resolve(transcript);
-      }
-    }, 60000);
-  });
-
-  resetTranscript();
-
-  if (userText.trim()) {
-    await sendMessage(userText.trim());
-  }
-}, [stopListening, speakingStartTime, resetTranscript, sendMessage, transcript]);
+    if (speakingStartTime) {
+      const duration = (Date.now() - speakingStartTime) / 1000;
+      setTotalSpeakingTime((prev) => prev + duration);
+      setSpeakingStartTime(null);
+    }
+  }, [stopListening, speakingStartTime]);
 
   const handleTextSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -471,7 +450,7 @@ export default function DrillPage() {
               onStop={stop}
             />
 
-            {/* Live transcript */}
+            {/* Live transcript widget display box */}
             {(transcript || interimTranscript) && (
               <div className="mt-8 animate-fade-in">
                 <div className="bg-surface border-l-2 border-accent px-6 py-4">
@@ -492,7 +471,7 @@ export default function DrillPage() {
         <div className="sticky bottom-0 bg-paper/95 backdrop-blur-md border-t border-divider pt-6 pb-8 md:pb-12">
           <div className="max-w-2xl mx-auto px-6">
 
-            {/* Level adjustment suggestion */}
+            {/* Level adjustment suggestion banner */}
             {levelSuggestion && !drillEnded && !isListening && !isSpeaking && (
               <div className="mb-6">
                 <LevelAdjustBanner
@@ -529,7 +508,7 @@ export default function DrillPage() {
               />
             </div>
 
-            {/* Mode toggle */}
+            {/* Mode toggle selectors */}
             <div className="flex justify-center mb-8">
               <div className="inline-flex bg-surface border border-divider rounded-sm p-1">
                 <button
@@ -553,7 +532,7 @@ export default function DrillPage() {
               </div>
             </div>
 
-            {/* Input Controls */}
+            {/* Input Controls Container layout */}
             {useTextMode ? (
               <form onSubmit={handleTextSubmit} className="flex gap-4">
                 <input
@@ -605,7 +584,7 @@ export default function DrillPage() {
           </div>
         </div>
 
-        {/* Modals & Overlays */}
+        {/* Modals & Overlays loading indicators */}
         <EvaluationLoading isVisible={isEvaluating} />
 
         {showFeedback && (

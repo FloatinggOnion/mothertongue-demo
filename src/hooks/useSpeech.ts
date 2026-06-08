@@ -6,6 +6,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 
 interface UseSpeechRecognitionOptions {
   lang?: string;
+  onTranscriptionComplete?: (text: string) => void;
 }
 
 interface UseSpeechRecognitionReturn {
@@ -19,7 +20,6 @@ interface UseSpeechRecognitionReturn {
   error: string | null;
 }
 
-// Added options parameter to handle dynamic language locale passing
 export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): UseSpeechRecognitionReturn {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -30,7 +30,6 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
 
-  // Keep a stable ref to options so it doesn't break useCallback caches
   const optionsRef = useRef(options);
   useEffect(() => {
     optionsRef.current = options;
@@ -68,7 +67,6 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
           const formData = new FormData();
           formData.append('audio', blob);
 
-          // Append explicit language string so backend routing correctly resolves 'hausa' or 'yoruba'
           const languageCode = optionsRef.current?.lang?.startsWith('ha') ? 'hausa' : 'yoruba';
           formData.append('language', languageCode);
 
@@ -80,8 +78,54 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
           if (!response.ok) throw new Error('Transcription failed');
 
           const data = await response.json();
-          if (data.transcription) {
-            setTranscript((prev) => (prev + ' ' + data.transcription).trim());
+
+          // =========================================================
+          // ASYNCHRONOUS HAUSA COUPLING: Client Side Polling Verification Loop
+          // =========================================================
+          if (response.status === 202 && data.callId) {
+            let transcriptResult = '';
+            const maxAttempts = 45; 
+            
+            for (let attempt = 0; attempt < maxAttempts; attempt++) {
+              const pollResponse = await fetch(`/api/transcribe?callId=${data.callId}`);
+              
+              if (pollResponse.ok) {
+                const resultData = await pollResponse.json();
+                
+                if (resultData.status === 'completed') {
+                  transcriptResult = resultData.text || '';
+                  break;
+                }
+                if (resultData.status === 'failed') {
+                  throw new Error(`Modal worker engine failure: ${resultData.error}`);
+                }
+              }
+              // Wait 1 second before querying worker grid queue allocation status again
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            }
+
+            const finalizedTranscript = transcriptResult.trim();
+            if (!finalizedTranscript) {
+              throw new Error('Could not transcribe Hausa audio');
+            }
+
+            setTranscript((prev) => (prev + ' ' + finalizedTranscript).trim());
+            
+            // Invoke the callback pattern to trigger UI stream updates
+            if (optionsRef.current?.onTranscriptionComplete) {
+              optionsRef.current.onTranscriptionComplete(finalizedTranscript);
+            }
+
+          // =========================================================
+          // DIRECT YORUBA PIPELINE CONNECTION
+          // =========================================================
+          } else if (data.transcription) {
+            const directTranscript = data.transcription.trim();
+            setTranscript((prev) => (prev + ' ' + directTranscript).trim());
+            
+            if (optionsRef.current?.onTranscriptionComplete) {
+              optionsRef.current.onTranscriptionComplete(directTranscript);
+            }
           }
         } catch (err) {
           console.error('Transcription error:', err);
@@ -92,7 +136,6 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
         }
       };
 
-      // Collect data every 250ms so the WebM file is complete and valid when sent
       mediaRecorder.start(250);
       setIsListening(true);
       setError(null);
@@ -109,7 +152,6 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
 
   const stopListening = useCallback(() => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      // Flush any remaining buffered audio before stopping
       mediaRecorderRef.current.requestData();
       mediaRecorderRef.current.stop();
     }
@@ -153,9 +195,6 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const currentObjectUrlRef = useRef<string | null>(null);
-
-  // Track whether we're in the middle of a server TTS request
-  // so we can abort if stop() is called before it completes
   const abortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -163,7 +202,6 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
     audioRef.current.onended = () => {
       setIsSpeaking(false);
       setUsingFallback(false);
-      // Clean up object URL after playback
       if (currentObjectUrlRef.current) {
         URL.revokeObjectURL(currentObjectUrlRef.current);
         currentObjectUrlRef.current = null;
@@ -175,7 +213,6 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
     };
 
     return () => {
-      // Cleanup on unmount
       if (audioRef.current) {
         audioRef.current.pause();
       }
@@ -201,7 +238,6 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
       URL.revokeObjectURL(currentObjectUrlRef.current);
       currentObjectUrlRef.current = null;
     }
-    // Abort any in-flight fetch
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
       abortControllerRef.current = null;
@@ -211,7 +247,6 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
   const speak = useCallback(async (text: string, gender?: 'male' | 'female') => {
     if (!text) return;
 
-    // Stop everything currently playing before starting new speech
     stopServerAudio();
     stopBrowserSpeech();
 
@@ -219,7 +254,6 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
     setError(null);
     setUsingFallback(false);
 
-    // Create a new abort controller for this request
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
 
@@ -235,64 +269,41 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
       if (!response.ok) throw new Error('TTS server request failed');
 
       const blob = await response.blob();
+      if (currentObjectUrlRef.current) {
+        URL.revokeObjectURL(currentObjectUrlRef.current);
+      }
 
-      // Check if we were aborted while waiting for the response
-      if (abortController.signal.aborted) return;
-
-      const url = URL.createObjectURL(blob);
-      currentObjectUrlRef.current = url;
+      const audioUrl = URL.createObjectURL(blob);
+      currentObjectUrlRef.current = audioUrl;
 
       if (audioRef.current) {
-        audioRef.current.src = url;
+        audioRef.current.src = audioUrl;
         await audioRef.current.play();
       }
-    } catch (err: unknown) {
-      // If aborted, just clean up silently
-      if ((err as { name?: string })?.name === 'AbortError') {
-        setIsSpeaking(false);
-        return;
-      }
-
-      console.warn('Server TTS failed, using browser fallback:', err);
+    } catch (err: any) {
+      if (err.name === 'AbortError') return;
+      console.error('TTS execution fell back to system native engines:', err);
       setUsingFallback(true);
-
       if (typeof window !== 'undefined' && window.speechSynthesis) {
-        // Make sure browser speech is clear before starting
-        window.speechSynthesis.cancel();
-
         const utterance = new SpeechSynthesisUtterance(text);
-        utterance.lang = options?.lang || 'yo-NG';
-
-        utterance.onstart = () => {
-          setIsSpeaking(true);
-        };
+        utterance.lang = options?.lang || 'en-US';
         utterance.onend = () => {
           setIsSpeaking(false);
           setUsingFallback(false);
         };
-        utterance.onerror = (e) => {
-          // Ignore 'interrupted' errors — they're caused by cancel() calls
-          if (e.error === 'interrupted') return;
-          console.error('Browser TTS Error:', e);
-          setIsSpeaking(false);
-          setUsingFallback(false);
-          setError('Speech synthesis failed');
-        };
-
         window.speechSynthesis.speak(utterance);
       } else {
         setIsSpeaking(false);
-        setError('Speech not supported on this device');
       }
     }
-  }, [stopServerAudio, stopBrowserSpeech, options?.lang]);
+  }, [options, stopBrowserSpeech, stopServerAudio]);
 
   const stop = useCallback(() => {
     stopServerAudio();
     stopBrowserSpeech();
     setIsSpeaking(false);
     setUsingFallback(false);
-  }, [stopServerAudio, stopBrowserSpeech]);
+  }, [stopBrowserSpeech, stopServerAudio]);
 
   return {
     speak,

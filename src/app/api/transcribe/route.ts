@@ -15,6 +15,47 @@ const speechClient = new v2.SpeechClient({
   apiEndpoint: `${REGION}-speech.googleapis.com`,
 });
 
+/**
+ * GET Handler: Handles safe client-side polling for asynchronous tasks
+ * without blocking long-running server connections.
+ */
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const callId = searchParams.get('callId');
+
+    if (!callId) {
+      return NextResponse.json({ error: 'Missing callId parameter' }, { status: 400 });
+    }
+
+    if (!MODAL_BASE_URL) {
+      return NextResponse.json({ error: 'Modal Hausa URL not configured' }, { status: 500 });
+    }
+
+    const pollResponse = await fetch(`${MODAL_BASE_URL}/result/${callId}`, {
+      method: 'GET',
+      cache: 'no-store', // Bypass Next.js cache mechanisms
+    });
+
+    if (!pollResponse.ok) {
+      throw new Error(`Modal result lookup failed with status ${pollResponse.status}`);
+    }
+
+    const resultData = await pollResponse.json();
+    return NextResponse.json(resultData);
+  } catch (error) {
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('Transcription API Polling Route Error:', errorMsg);
+    return NextResponse.json(
+      { error: 'Failed to verify background task status', details: errorMsg },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * POST Handler: Processes incoming audio payloads
+ */
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
@@ -41,10 +82,10 @@ export async function POST(request: NextRequest) {
 
       console.log('[STT Router] Dispatched Hausa audio to Modal queue...');
 
-      // 1. Submit the audio buffer directly to Modal
+      // Submit the audio buffer directly to Modal using its true recording content-type
       const submitResponse = await fetch(`${MODAL_BASE_URL}/transcribe`, {
         method: 'POST',
-        headers: { 'Content-Type': 'audio/wav' },
+        headers: { 'Content-Type': audioFile.type || 'audio/webm' },
         body: audioContent,
       });
 
@@ -55,38 +96,8 @@ export async function POST(request: NextRequest) {
       const { call_id } = await submitResponse.json();
       console.log(`[STT Router] Hausa Job queued. ID: ${call_id}`);
 
-      // 2. Poll for the execution status until completed
-      let transcript = '';
-      const maxAttempts = 30; 
-      
-      for (let attempt = 0; attempt < maxAttempts; attempt++) {
-        const pollResponse = await fetch(`${MODAL_BASE_URL}/result/${call_id}`, {
-          method: 'GET',
-          cache: 'no-store', // Bypass Next.js route caching
-        });
-
-        if (!pollResponse.ok) throw new Error(`Polling failed at status ${pollResponse.status}`);
-
-        const resultData = await pollResponse.json();
-
-        if (resultData.status === 'completed') {
-          transcript = resultData.text || '';
-          break;
-        }
-        if (resultData.status === 'failed') {
-          throw new Error(`Modal container execution error: ${resultData.error}`);
-        }
-
-        // Wait 1 second before querying again
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-
-      const finalizedTranscript = transcript.trim();
-      if (!finalizedTranscript) {
-        return NextResponse.json({ error: 'Could not transcribe Hausa audio' }, { status: 400 });
-      }
-
-      return NextResponse.json({ transcription: finalizedTranscript });
+      // Instantly hand off control back to client before server constraints kick in
+      return NextResponse.json({ status: 'queued', callId: call_id }, { status: 202 });
     }
 
     // ==========================================
