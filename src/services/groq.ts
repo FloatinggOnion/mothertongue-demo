@@ -112,6 +112,113 @@ function buildPartnerSystemPrompt(
 }
 
 /**
+ * Cheap heuristic patterns that short-circuit classification of a user turn
+ * as an out-of-character aside, avoiding a network call entirely.
+ */
+const ASIDE_PATTERNS: RegExp[] = [
+  /how (do|would) (i|you) say\b/i,
+  /what does\b[^?]*\bmean\b/i,
+  /what'?s the word for\b/i,
+  /how do you pronounce\b/i,
+  /\btranslate\b/i,
+  /\bin english\b/i,
+  /^\s*(wait|hold on|sorry),\s*.*\?\s*$/i,
+];
+
+export type TurnKind = 'roleplay' | 'aside';
+
+/**
+ * Classifies a user's turn as either an in-character roleplay line or an
+ * out-of-character meta question ("aside") about the language itself.
+ *
+ * Stage 1 is a free heuristic regex match. Stage 2 falls back to a single
+ * cheap Groq call when the heuristic doesn't match. Fail-safe direction:
+ * any error, empty content, or unrecognized value resolves to 'roleplay' —
+ * misrouting a roleplay line breaks the scene, whereas a missed aside is
+ * recoverable via the manual Ask button.
+ */
+export async function classifyUserTurn(userMessage: string, language?: string): Promise<TurnKind> {
+  if (ASIDE_PATTERNS.some((pattern) => pattern.test(userMessage))) {
+    return 'aside';
+  }
+
+  const langDisplay = (language || 'yoruba').toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
+
+  const systemPrompt = `
+    The user is mid-roleplay in a ${langDisplay} language-learning drill.
+    Decide whether their turn is an in-character line spoken to their
+    conversation partner, or an out-of-character meta question to the app
+    about the language itself (e.g. asking how to say/pronounce/translate
+    something, or asking what a word means).
+
+    OUTPUT FORMAT REQUIREMENTS:
+    Return strictly one JSON object: { "kind": "aside" } or { "kind": "roleplay" }.
+    Do not output anything outside the JSON structure.
+  `.trim();
+
+  try {
+    const rawText = await callGroq(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      { json: true, temperature: 0 }
+    );
+    const parsed = JSON.parse(rawText || '{}');
+    return parsed.kind === 'aside' ? 'aside' : 'roleplay';
+  } catch (error) {
+    console.error('Error classifying user turn:', error);
+    return 'roleplay';
+  }
+}
+
+/**
+ * Answers a learner's out-of-character side question in plain English,
+ * completely out of the roleplay thread. Deliberately history-free — only
+ * the question itself is sent — so asides can never leak into the
+ * scenario transcript.
+ */
+export async function getAsideAnswer(
+  userQuestion: string,
+  scenario: any,
+  proficiencyLevel: ProficiencyLevel,
+  language?: string
+): Promise<{ answer: string }> {
+  const activeLang = language || scenario?.language || 'yoruba';
+  const langDisplay = activeLang.toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
+
+  const systemPrompt = `
+    You are a helpful ${langDisplay} tutor answering a quick side question
+    from a learner. You are OUT OF CHARACTER — never roleplay, never
+    continue the scene, never greet in persona.
+
+    Answer in plain English in at most 3 sentences. When the learner asked
+    how to say something, include the ${langDisplay} phrase plus a short
+    literal gloss. Tailor your register to a "${proficiencyLevel}" level
+    learner.
+
+    OUTPUT FORMAT REQUIREMENTS:
+    Return strictly one JSON object with a single "answer" string key.
+    Example: { "answer": "..." }
+  `.trim();
+
+  try {
+    const rawText = await callGroq(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userQuestion },
+      ],
+      { json: true, temperature: 0.3 }
+    );
+    const parsed = JSON.parse(rawText || '{}');
+    return { answer: parsed.answer || "Sorry — I couldn't look that up just now. Try asking again." };
+  } catch (error) {
+    console.error('Error generating aside answer:', error);
+    return { answer: "Sorry — I couldn't look that up just now. Try asking again." };
+  }
+}
+
+/**
  * Generates the AI partner's conversational response and seamlessly translates it to English.
  */
 export async function getPartnerResponse(

@@ -7,6 +7,7 @@ const MessageSchema = z.object({
   content: z.string(),
   timestamp: z.number(),
   translation: z.string().optional(),
+  kind: z.enum(['roleplay', 'aside-question', 'aside-answer']).optional(),
 });
 
 const ProficiencyLevelSchema = z.enum(['beginner', 'intermediate', 'advanced']);
@@ -19,6 +20,7 @@ export const ChatSchema = z.object({
   conversationHistory: z.array(MessageSchema),
   userMessage: z.string().min(1, 'userMessage is required'),
   language: z.string().optional(), // 🌟 Added to support active language context
+  forceAside: z.boolean().optional(),
 });
 
 export const EvaluateSchema = z.object({

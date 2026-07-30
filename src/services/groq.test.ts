@@ -17,7 +17,7 @@ vi.mock('@/lib/logger', () => ({
   logError: vi.fn(),
 }));
 
-import { evaluateConversation } from '@/services/groq';
+import { evaluateConversation, classifyUserTurn, getAsideAnswer } from '@/services/groq';
 
 describe('Groq Service', () => {
   beforeEach(() => {
@@ -67,6 +67,69 @@ describe('Groq Service', () => {
       const messages: any[] = [];
 
       await expect(evaluateConversation(scenario, messages)).rejects.toThrow('Groq API Error');
+    });
+  });
+
+  describe('classifyUserTurn()', () => {
+    it("resolves to 'aside' with zero fetch calls for a heuristic match", async () => {
+      const result = await classifyUserTurn('how do I say tomato?');
+
+      expect(result).toBe('aside');
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it("issues one Groq call and resolves 'aside' when the model returns aside for a non-matching message", async () => {
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ kind: 'aside' }) } }] });
+
+      const result = await classifyUserTurn('Ile mi da?');
+
+      expect(result).toBe('aside');
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it("resolves 'roleplay' when the model returns roleplay", async () => {
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ kind: 'roleplay' }) } }] });
+
+      const result = await classifyUserTurn('Elo ni eleyi?');
+
+      expect(result).toBe('roleplay');
+    });
+
+    it('resolves roleplay (fail-safe) when the Groq call rejects', async () => {
+      (global.fetch as any).mockRejectedValueOnce(new Error('network down'));
+
+      const result = await classifyUserTurn('Elo ni eleyi?');
+
+      expect(result).toBe('roleplay');
+    });
+
+    it('resolves roleplay (fail-safe) when the Groq call returns unparsable JSON', async () => {
+      mockFetchOnce({ choices: [{ message: { content: '{not json}' } }] });
+
+      const result = await classifyUserTurn('Elo ni eleyi?');
+
+      expect(result).toBe('roleplay');
+    });
+  });
+
+  describe('getAsideAnswer()', () => {
+    it('returns the parsed answer string on a successful response', async () => {
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ answer: 'Tomati means tomato.' }) } }] });
+
+      const scenario = { id: 'test', language: 'yoruba' } as any;
+      const result = await getAsideAnswer('how do I say tomato?', scenario, 'beginner');
+
+      expect(result).toEqual({ answer: 'Tomati means tomato.' });
+    });
+
+    it('returns a non-empty fallback string instead of throwing when the call fails', async () => {
+      (global.fetch as any).mockRejectedValueOnce(new Error('network down'));
+
+      const scenario = { id: 'test', language: 'yoruba' } as any;
+      const result = await getAsideAnswer('how do I say tomato?', scenario, 'beginner');
+
+      expect(typeof result.answer).toBe('string');
+      expect(result.answer.length).toBeGreaterThan(0);
     });
   });
 });
