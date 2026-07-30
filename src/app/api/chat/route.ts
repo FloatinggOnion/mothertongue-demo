@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPartnerResponse } from '@/services/groq';
+import { getPartnerResponse, classifyUserTurn, getAsideAnswer } from '@/services/groq';
 import { getScenarioById } from '@/config/scenarios';
 import { ChatSchema, getZodErrorMessage } from '@/lib/zod-schemas';
+import { roleplayHistory } from '@/lib/conversation';
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,6 +22,7 @@ export async function POST(request: NextRequest) {
       proficiencyLevel,
       conversationHistory,
       userMessage,
+      forceAside,
     } = validationResult.data;
 
     const scenario = getScenarioById(scenarioId);
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🌟 Safely attach the language onto the scenario object 
+    // 🌟 Safely attach the language onto the scenario object
     // This passes the data forward without using a 5th argument slot
     const fallbackData = validationResult.data as Record<string, any>;
     const dynamicScenario = {
@@ -39,15 +41,29 @@ export async function POST(request: NextRequest) {
       language: fallbackData.language || 'yoruba'
     };
 
+    // Defensive strip: the client already filters asides out of the history
+    // it sends, but the route is the trust boundary that guarantees the
+    // partner model never sees an aside — belt and braces.
+    const safeHistory = roleplayHistory(conversationHistory);
+
+    // Honour an explicit manual override (Ask button) by skipping
+    // classification entirely; otherwise classify the turn.
+    const turnKind = forceAside ? 'aside' : await classifyUserTurn(userMessage, dynamicScenario.language);
+
+    if (turnKind === 'aside') {
+      const { answer } = await getAsideAnswer(userMessage, dynamicScenario, proficiencyLevel, dynamicScenario.language);
+      return NextResponse.json({ kind: 'aside', answer });
+    }
+
     // Get AI partner response using 4 parameters
     const response = await getPartnerResponse(
       dynamicScenario,
       proficiencyLevel,
-      conversationHistory,
+      safeHistory,
       userMessage
     );
 
-    return NextResponse.json(response);
+    return NextResponse.json({ kind: 'roleplay', ...response });
   } catch (error) {
     console.error('Chat API error:', error);
     return NextResponse.json(
