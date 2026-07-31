@@ -87,18 +87,26 @@ function buildPartnerSystemPrompt(
       break;
   }
 
+  const aiRole = scenario?.aiRole || 'Conversation Partner';
+
   return `
     You are an immersive, interactive language-learning AI partner roleplaying a specific persona.
 
     CRITICAL CONTEXT:
     - Target Language to Speak: ${langDisplay}
     - User Proficiency Level: ${proficiencyLevel.toUpperCase()}
-    - Your Assigned Character Role: ${scenario?.aiRole || 'Conversation Partner'}
+    - Your Assigned Character Role: ${aiRole}
     - Scenario Setting/Context: ${scenario?.description || 'General Conversation'}
     - Starter Prompt Context: "${scenario?.starterPrompt || ''}"
 
+    ROLE BOUNDARY (ABSOLUTE):
+    - You are ONLY ${aiRole}. The human user is the *other* party in this scene; you are never that person.
+    - Produce exactly ONE utterance, spoken by ${aiRole}, and then stop.
+    - Never write the user's lines, never prefix any speaker label or name-colon to your output, never write narration, stage directions, or actions for the user, never invent or predict what the user said or will say, never continue the exchange past your own turn.
+    - If the user's meaning is unclear, ask one short in-character clarifying question rather than supplying their line for them.
+
     ROLEPLAY BEHAVIOR RULES:
-    1. Stay 100% in character as "${scenario?.aiRole || 'Conversation Partner'}". Never break character to say "As an AI..." or "Welcome to this lesson...".
+    1. Stay 100% in character as "${aiRole}". Never break character to say "As an AI..." or "Welcome to this lesson...".
     2. Do not offer explicit grammar corrections or structured feedback in the middle of the chat flow. Act exactly like a real person would in this scenario.
     3. Keep your response relevant to the conversational thread.
 
@@ -112,6 +120,209 @@ function buildPartnerSystemPrompt(
 }
 
 /**
+ * One-line, recency-biased reminder of the role boundary. Inserted right
+ * before the newest user turn on longer conversations, since a system
+ * line adjacent to the latest turn survives long histories better than
+ * the far-away opening prompt.
+ */
+function buildRoleReinforcement(aiRole: string): string {
+  return `Reminder: you are ONLY ${aiRole}. Never speak, narrate, or write dialogue for the user — produce exactly one utterance for ${aiRole} and then stop.`;
+}
+
+/** Escapes regex special characters for safe interpolation into a RegExp. */
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Heuristic (free) speaker-label / stage-direction detector for role drift.
+ * Matches: a line-start speaker label for the user side, a line-start label
+ * using the AI character's own name (self-labeling is also a boundary
+ * break), bracketed/asterisked stage directions addressing the user, and
+ * 2+ line-start speaker labels anywhere in the reply.
+ */
+const DRIFT_USER_LABEL_PATTERN = /^\s*(user|you|me|customer|buyer|student|learner)\s*:/im;
+const DRIFT_STAGE_DIRECTION_PATTERNS: RegExp[] = [
+  /\*[^*]*\b(you|the user|the customer)\b[^*]*\*/i,
+  /\[[^\]]*\byou\b[^\]]*\]/i,
+];
+const DRIFT_LINE_LABEL_PATTERN = /^\s*[A-Za-z][\w' -]{0,30}:/gm;
+const DRIFT_LLM_CHECK_THRESHOLD = 6;
+
+function hasHeuristicRoleDrift(reply: string, scenario: any): boolean {
+  if (DRIFT_USER_LABEL_PATTERN.test(reply)) return true;
+
+  const aiRoleFirstWord = String(scenario?.aiRole || '').trim().split(/\s+/)[0];
+  if (aiRoleFirstWord) {
+    const ownLabelPattern = new RegExp(`^\\s*${escapeRegExp(aiRoleFirstWord)}\\s*:`, 'im');
+    if (ownLabelPattern.test(reply)) return true;
+  }
+
+  if (DRIFT_STAGE_DIRECTION_PATTERNS.some((pattern) => pattern.test(reply))) return true;
+
+  const lineLabelMatches = reply.match(DRIFT_LINE_LABEL_PATTERN) || [];
+  if (lineLabelMatches.length >= 2) return true;
+
+  return false;
+}
+
+/**
+ * Detects whether a generated partner reply has drifted into voicing the
+ * user's side of the conversation. Stage 1 is a free heuristic that always
+ * runs. Stage 2 (a single cheap Groq call) only fires when the heuristic is
+ * clean AND the conversation is long enough that drift risk justifies the
+ * cost. Any failure in the LLM check resolves to false — never block a
+ * valid reply on a failed check.
+ */
+export async function detectRoleDrift(
+  reply: string,
+  scenario: any,
+  historyLength: number
+): Promise<boolean> {
+  if (hasHeuristicRoleDrift(reply, scenario)) {
+    return true;
+  }
+
+  if (historyLength < DRIFT_LLM_CHECK_THRESHOLD) {
+    return false;
+  }
+
+  const aiRole = scenario?.aiRole || 'Conversation Partner';
+  const systemPrompt = `
+    You are auditing a single line of roleplay dialogue for a language-learning app.
+    The speaker is supposed to be ONLY "${aiRole}".
+    Determine whether the following reply is actually voicing the user's/other party's side
+    of the conversation rather than speaking purely as "${aiRole}".
+
+    OUTPUT FORMAT REQUIREMENTS:
+    Return strictly one JSON object: { "voicedUser": true } or { "voicedUser": false }.
+    Do not output anything outside the JSON structure.
+  `.trim();
+
+  try {
+    const rawText = await callGroq(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: reply },
+      ],
+      { json: true, temperature: 0 }
+    );
+    const parsed = JSON.parse(rawText || '{}');
+    return parsed.voicedUser === true;
+  } catch (error) {
+    console.error('Error detecting role drift:', error);
+    return false;
+  }
+}
+
+/**
+ * Cheap heuristic patterns that short-circuit classification of a user turn
+ * as an out-of-character aside, avoiding a network call entirely.
+ */
+const ASIDE_PATTERNS: RegExp[] = [
+  /how (do|would) (i|you) say\b/i,
+  /what does\b[^?]*\bmean\b/i,
+  /what'?s the word for\b/i,
+  /how do you pronounce\b/i,
+  /\btranslate\b/i,
+  /\bin english\b/i,
+  /^\s*(wait|hold on|sorry),\s*.*\?\s*$/i,
+];
+
+export type TurnKind = 'roleplay' | 'aside';
+
+/**
+ * Classifies a user's turn as either an in-character roleplay line or an
+ * out-of-character meta question ("aside") about the language itself.
+ *
+ * Stage 1 is a free heuristic regex match. Stage 2 falls back to a single
+ * cheap Groq call when the heuristic doesn't match. Fail-safe direction:
+ * any error, empty content, or unrecognized value resolves to 'roleplay' —
+ * misrouting a roleplay line breaks the scene, whereas a missed aside is
+ * recoverable via the manual Ask button.
+ */
+export async function classifyUserTurn(userMessage: string, language?: string): Promise<TurnKind> {
+  if (ASIDE_PATTERNS.some((pattern) => pattern.test(userMessage))) {
+    return 'aside';
+  }
+
+  const langDisplay = (language || 'yoruba').toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
+
+  const systemPrompt = `
+    The user is mid-roleplay in a ${langDisplay} language-learning drill.
+    Decide whether their turn is an in-character line spoken to their
+    conversation partner, or an out-of-character meta question to the app
+    about the language itself (e.g. asking how to say/pronounce/translate
+    something, or asking what a word means).
+
+    OUTPUT FORMAT REQUIREMENTS:
+    Return strictly one JSON object: { "kind": "aside" } or { "kind": "roleplay" }.
+    Do not output anything outside the JSON structure.
+  `.trim();
+
+  try {
+    const rawText = await callGroq(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      { json: true, temperature: 0 }
+    );
+    const parsed = JSON.parse(rawText || '{}');
+    return parsed.kind === 'aside' ? 'aside' : 'roleplay';
+  } catch (error) {
+    console.error('Error classifying user turn:', error);
+    return 'roleplay';
+  }
+}
+
+/**
+ * Answers a learner's out-of-character side question in plain English,
+ * completely out of the roleplay thread. Deliberately history-free — only
+ * the question itself is sent — so asides can never leak into the
+ * scenario transcript.
+ */
+export async function getAsideAnswer(
+  userQuestion: string,
+  scenario: any,
+  proficiencyLevel: ProficiencyLevel,
+  language?: string
+): Promise<{ answer: string }> {
+  const activeLang = language || scenario?.language || 'yoruba';
+  const langDisplay = activeLang.toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
+
+  const systemPrompt = `
+    You are a helpful ${langDisplay} tutor answering a quick side question
+    from a learner. You are OUT OF CHARACTER — never roleplay, never
+    continue the scene, never greet in persona.
+
+    Answer in plain English in at most 3 sentences. When the learner asked
+    how to say something, include the ${langDisplay} phrase plus a short
+    literal gloss. Tailor your register to a "${proficiencyLevel}" level
+    learner.
+
+    OUTPUT FORMAT REQUIREMENTS:
+    Return strictly one JSON object with a single "answer" string key.
+    Example: { "answer": "..." }
+  `.trim();
+
+  try {
+    const rawText = await callGroq(
+      [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userQuestion },
+      ],
+      { json: true, temperature: 0.3 }
+    );
+    const parsed = JSON.parse(rawText || '{}');
+    return { answer: parsed.answer || "Sorry — I couldn't look that up just now. Try asking again." };
+  } catch (error) {
+    console.error('Error generating aside answer:', error);
+    return { answer: "Sorry — I couldn't look that up just now. Try asking again." };
+  }
+}
+
+/**
  * Generates the AI partner's conversational response and seamlessly translates it to English.
  */
 export async function getPartnerResponse(
@@ -122,20 +333,45 @@ export async function getPartnerResponse(
   language?: string
 ) {
   const activeLang = language || scenario?.language || 'yoruba';
+  const aiRole = scenario?.aiRole || 'Conversation Partner';
   const systemPrompt = buildPartnerSystemPrompt(scenario, proficiencyLevel, activeLang);
 
-  const messages = [
+  const historyMessages = formatGroqHistory(conversationHistory);
+  const messages: { role: string; content: string }[] = [
     { role: 'system', content: systemPrompt },
-    ...formatGroqHistory(conversationHistory),
-    { role: 'user', content: userMessage },
+    ...historyMessages,
   ];
+
+  // Periodic reinforcement: on longer histories, insert a recency-biased
+  // reminder immediately before the newest user turn — it survives long
+  // histories better than the far-away opening system prompt.
+  if (conversationHistory.length >= 6) {
+    messages.push({ role: 'system', content: buildRoleReinforcement(aiRole) });
+  }
+  messages.push({ role: 'user', content: userMessage });
 
   try {
     const rawText = await callGroq(messages, { json: true, temperature: 0.7 });
     const parsed = JSON.parse(rawText || '{}');
-    const replyText = parsed.reply || '';
+    let replyText = parsed.reply || '';
 
-    // Handle background translation execution seamlessly
+    const drifted = await detectRoleDrift(replyText, scenario, conversationHistory.length);
+    if (drifted) {
+      const correctiveMessages: { role: string; content: string }[] = [
+        ...messages,
+        {
+          role: 'system',
+          content: `Your previous attempt broke the role boundary by speaking for the user. This attempt must contain only ${aiRole}'s single utterance — never the user's line, never a speaker label, never narration for the user.`,
+        },
+      ];
+      const retryRawText = await callGroq(correctiveMessages, { json: true, temperature: 0.7 });
+      const retryParsed = JSON.parse(retryRawText || '{}');
+      // Use the retried reply unconditionally — no third attempt, no recursion.
+      replyText = retryParsed.reply || replyText;
+    }
+
+    // Handle background translation execution seamlessly. Translate only
+    // the final chosen reply, never a discarded drifted draft.
     const translation = await translateToEnglish(replyText, activeLang);
 
     return {

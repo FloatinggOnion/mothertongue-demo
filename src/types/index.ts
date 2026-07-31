@@ -17,12 +17,15 @@ export interface Scenario {
   gender: 'male' | 'female';
 }
 
+export type MessageKind = 'roleplay' | 'aside-question' | 'aside-answer';
+
 export interface Message {
   id: string;
   role: 'user' | 'ai';
   content: string;
   translation?: string;
   timestamp: number;
+  kind?: MessageKind;
 }
 
 export interface ConversationMetrics {
