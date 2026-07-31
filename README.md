@@ -29,18 +29,16 @@ Can an LLM authentically replicate specific sociolinguistic contexts?
 
 ## 🛠️ System Architecture (Methodology)
 
-To enable this immersion, we architected a low-latency, resilient voice pipeline:
+To enable this immersion, we architected a resilient voice pipeline split across two providers by language:
 
-### A. Dual-Engine Speech Recognition
-We developed a novel hybrid approach to ensure accessibility across diverse hardware/browsers:
-1.  **Primary**: **Native Web Speech API** (Edge/Chrome) for zero-latency, on-device transcription.
-2.  **Fallback**: **Server-Side Speech-to-Text Transcription** (Google Cloud Speech-to-Text). If the native API fails (e.g., on Arc, Brave, or unreliable networks), the system automatically captures audio via `MediaRecorder` and pipelines it to the server for high-fidelity transcription.
+### A. Speech Recognition (STT)
+All server-side transcription runs through **Google Cloud Speech-to-Text v2 (Chirp)**, for both Yorùbá (`yo-NG`) and Hausa (`ha-NG`). Audio is captured client-side via `MediaRecorder` and posted to `/api/transcribe`, which returns a transcript synchronously. If server-side transcription fails, the client falls back to the browser's native Web Speech API where available.
 
-### B. Gender-Specific Synthesis
-To test the impact of identity on learner engagement, the system dynamically switches TTS voices:
-*   **Variable**: Gender alignment with scenario characters.
-*   **Tool**: **ElevenLabs** API integration.
-*   **Configuration**: Scenarios trigger distinct Voice IDs (e.g., 'Yomi' for male roles, 'Olufunmilola' for female roles) to maintain immersion.
+### B. Speech Synthesis (TTS)
+TTS is routed by language, since no single vendor covers both well:
+*   **Yorùbá**: **Google Cloud Text-to-Speech** (`yo-NG`), with `ssmlGender` wired to each scenario's `gender` field for male/female voice selection.
+*   **Hausa**: **ElevenLabs** (`eleven_v3`, `language_code: 'hau'`), with distinct Voice IDs per gender.
+*   **Igbo**: not yet supported — no vendor evaluated so far offers a production-ready Igbo TTS voice. See `.planning/` for status.
 
 ---
 
@@ -63,7 +61,7 @@ As of version 0.1.0, the following capabilities have been validated:
 
 1.  **Longitudinal Study**: Tracking learner confidence metrics over 30-day cohorts.
 2.  **Phonetic Analysis**: Integrating audio-level analysis to provide feedback on Yorùbá tonality (a critical semantic feature).
-3.  **Expansion**: Replicating the architecture for Igbo, Hausa, and Nigerian Pidgin.
+3.  **Expansion**: Igbo and Nigerian Pidgin remain unsupported pending a viable TTS vendor (Hausa now ships via ElevenLabs).
 
 ---
 
@@ -74,7 +72,8 @@ This repository contains the source code for the Mothertongue experimental platf
 ### Prerequisites
 *   Node.js 18+
 *   Groq API Key
-*   ElevenLabs API Key
+*   Google Cloud service account with Speech-to-Text + Text-to-Speech APIs enabled
+*   ElevenLabs API Key (Hausa TTS only)
 
 ### Installation
 
@@ -88,11 +87,8 @@ or
 npm install
 
 # 3. Configure Environment
-# Create .env.local with your keys:
-GROQ_API_KEY=your_key
-ELEVENLABS_API_KEY=your_key
-ELEVENLABS_VOICE_ID_MALE=your_male_voice_id
-ELEVENLABS_VOICE_ID_FEMALE=your_female_voice_id
+# Copy .env.example to .env.local and fill in your keys:
+cp .env.example .env.local
 
 # 4. Run the development server
 yarn dev

@@ -2,10 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import { TtsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
-// Yoruba (Nigeria) TTS - let Google Cloud pick the default voice for yo-NG locale
-
-// Initialize client with credentials from environment variables
-const client = new TextToSpeechClient({
+// Initialize Google Cloud TTS client (used for Yoruba)
+const googleClient = new TextToSpeechClient({
   credentials: {
     client_email: process.env.GOOGLE_CLIENT_EMAIL,
     private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
@@ -25,34 +23,50 @@ export async function POST(request: NextRequest) {
     }
 
     const { text, gender, language } = validationResult.data;
-    console.log('[TTS] Request:', { textLength: text.length, gender, language });
+    const voiceGender = gender ?? 'male';
+    console.log('[TTS] Request:', { textLength: text.length, gender: voiceGender, language });
 
     // ==========================================
-    // PATH A: HAUSA PIPELINE (Modal Engine)
+    // PATH A: HAUSA PIPELINE (ElevenLabs)
     // ==========================================
     if (language?.toLowerCase() === 'hausa') {
-      const modalUrl = process.env.HAUSA_MODAL_TTS_URL;
-      if (!modalUrl) {
-        return NextResponse.json({ error: 'Hausa TTS URL not configured' }, { status: 500 });
+      const apiKey = process.env.ELEVENLABS_API_KEY;
+      const voiceId = voiceGender === 'female'
+        ? process.env.ELEVENLABS_VOICE_ID_FEMALE
+        : process.env.ELEVENLABS_VOICE_ID_MALE;
+
+      if (!apiKey || !voiceId) {
+        return NextResponse.json({ error: 'ElevenLabs Hausa TTS not configured' }, { status: 500 });
       }
 
-      console.log('[TTS Router] Dispatched Hausa TTS to Modal...');
-      
-      const modalResponse = await fetch(modalUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text })
-      });
+      console.log('[TTS Router] Dispatched Hausa TTS to ElevenLabs...');
 
-      if (!modalResponse.ok) {
-        console.error('[TTS Router] Hausa TTS failed:', modalResponse.statusText);
+      const elevenLabsResponse = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': apiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            text,
+            model_id: 'eleven_v3',
+            language_code: 'hau',
+          }),
+        }
+      );
+
+      if (!elevenLabsResponse.ok) {
+        const details = await elevenLabsResponse.text();
+        console.error('[TTS Router] ElevenLabs Hausa TTS failed:', elevenLabsResponse.status, details);
         return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
       }
 
-      const audioBuffer = await modalResponse.arrayBuffer();
+      const audioBuffer = await elevenLabsResponse.arrayBuffer();
       return new NextResponse(audioBuffer, {
         headers: {
-          'Content-Type': 'audio/wav',
+          'Content-Type': 'audio/mpeg',
         },
       });
     }
@@ -60,10 +74,11 @@ export async function POST(request: NextRequest) {
     // ==========================================
     // PATH B: YORUBA PIPELINE (Google Cloud TTS)
     // ==========================================
-    const [response] = await client.synthesizeSpeech({
+    const [response] = await googleClient.synthesizeSpeech({
       input: { text },
       voice: {
-        languageCode: 'yo-NG'
+        languageCode: 'yo-NG',
+        ssmlGender: voiceGender === 'female' ? 'FEMALE' : 'MALE',
       },
       audioConfig: {
         audioEncoding: 'MP3',
@@ -84,7 +99,6 @@ export async function POST(request: NextRequest) {
 
     console.log('[TTS] Success, audioContent type:', typeof audioContent, 'length:', audioContent.length);
 
-    // Return audio as MP3
     const audioBytes = typeof audioContent === 'string'
       ? Buffer.from(audioContent, 'base64')
       : audioContent;
@@ -97,7 +111,7 @@ export async function POST(request: NextRequest) {
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
-    console.error('[TTS] Google TTS API error:', msg);
+    console.error('[TTS] API error:', msg);
 
     if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as { message: unknown }).message === 'string' && (error as { message: string }).message.includes('credentials')) {
       return NextResponse.json(
@@ -112,4 +126,3 @@ export async function POST(request: NextRequest) {
     );
   }
 }
-
