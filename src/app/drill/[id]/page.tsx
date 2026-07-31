@@ -23,6 +23,7 @@ import {
   ProficiencyAssessment,
 } from '@/types';
 import { loadSession, saveSession, clearSession } from '@/lib/session-store';
+import { roleplayHistory } from '@/lib/conversation';
 
 /* Hallmark · genre: editorial · macrostructure: Editorial Split · design-system: design.md */
 
@@ -67,9 +68,16 @@ export default function DrillPage() {
   const [textInput, setTextInput] = useState('');
   const [useTextMode, setUseTextMode] = useState(false);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+  const [asideMode, setAsideMode] = useState(false);
 
   // Refs
   const conversationRef = useRef<HTMLDivElement>(null);
+  // Kept in sync so the memoised useSpeechRecognition callback (which
+  // closes over stale state) always reads the current armed state.
+  const asideModeRef = useRef(asideMode);
+  useEffect(() => {
+    asideModeRef.current = asideMode;
+  }, [asideMode]);
 
   // Speech synthesis hook declared first so variable references are bound inside memory grid
   const { speak, stop, isSpeaking, usingFallback } = useSpeechSynthesis({
@@ -77,7 +85,7 @@ export default function DrillPage() {
   });
 
   // Send message to AI (Refactored to Functional Updates to capture current message arrays accurately)
-  const sendMessage = useCallback(async (userText: string) => {
+  const sendMessage = useCallback(async (userText: string, opts?: { forceAside?: boolean }) => {
     if (!userText.trim() || !scenario) return;
 
     setShowSuggestions(false);
@@ -87,14 +95,18 @@ export default function DrillPage() {
       role: 'user',
       content: userText.trim(),
       timestamp: Date.now(),
+      // Optimistic tag — retagged to 'aside-question' below if the server
+      // classifies it as an aside after the fact.
+      kind: opts?.forceAside ? 'aside-question' : 'roleplay',
     };
-    
-    let currentHistory: Message[] = [];
+
+    let previousMessages: Message[] = [];
     setMessages((prev) => {
-      currentHistory = [...prev, userMessage];
-      return currentHistory;
+      previousMessages = prev;
+      return [...prev, userMessage];
     });
-    
+    const currentHistory: Message[] = [...previousMessages, userMessage];
+
     setIsLoading(true);
 
     try {
@@ -104,27 +116,50 @@ export default function DrillPage() {
         body: JSON.stringify({
           scenarioId: scenario.id,
           proficiencyLevel,
-          conversationHistory: currentHistory,
+          // History as it was BEFORE this turn — sending currentHistory
+          // (which already includes userMessage) would double-send the
+          // newest turn since it's also passed as userMessage below.
+          conversationHistory: roleplayHistory(previousMessages),
           userMessage: userText.trim(),
           language: scenario.language,
+          forceAside: opts?.forceAside ?? false,
         }),
       });
 
       const data = await response.json();
 
-      if (data.reply) {
+      if (data.kind === 'aside') {
+        // Classification happened server-side after the optimistic append —
+        // retro-tag the user's message and append the tutor's answer.
+        setMessages((prev) =>
+          prev.map((m) => (m.id === userMessage.id ? { ...m, kind: 'aside-question' as const } : m))
+        );
+        const asideAnswer: Message = {
+          id: crypto.randomUUID(),
+          role: 'ai',
+          content: data.answer,
+          kind: 'aside-answer',
+          timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, asideAnswer]);
+        // No speak() — the answer is English tutor prose, not a target-language
+        // partner line. No assess-level trigger — asides don't reflect roleplay ability.
+      } else if (data.reply) {
         const aiMessage: Message = {
           id: crypto.randomUUID(),
           role: 'ai',
           content: data.reply,
           translation: data.translation,
           timestamp: Date.now(),
+          kind: 'roleplay',
         };
         setMessages((prev) => [...prev, aiMessage]);
         speak(data.reply, scenario.gender);
 
-        // Adaptive difficulty: assess every 4 user turns
-        const userTurnCount = currentHistory.filter((m) => m.role === 'user').length;
+        // Adaptive difficulty: assess every 4 user turns, counted from
+        // roleplay-only history so asides never advance the cadence.
+        const roleplayUpToNow = roleplayHistory([...currentHistory, aiMessage]);
+        const userTurnCount = roleplayUpToNow.filter((m) => m.role === 'user').length;
         if (!manualOverride && userTurnCount % 4 === 0 && userTurnCount > lastAssessedTurnCount) {
           setLastAssessedTurnCount(userTurnCount);
           fetch('/api/assess-level', {
@@ -132,7 +167,7 @@ export default function DrillPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               proficiencyLevel,
-              conversationHistory: [...currentHistory, aiMessage],
+              conversationHistory: roleplayUpToNow,
               language: scenario.language,
             }),
           })
@@ -151,6 +186,7 @@ export default function DrillPage() {
       console.error('Failed to get AI response:', error);
     } finally {
       setIsLoading(false);
+      setAsideMode(false);
     }
   }, [scenario, proficiencyLevel, manualOverride, lastAssessedTurnCount, speak]);
 
@@ -168,7 +204,7 @@ export default function DrillPage() {
     lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG',
     onTranscriptionComplete: (finalizedText) => {
       if (finalizedText.trim()) {
-        sendMessage(finalizedText.trim());
+        sendMessage(finalizedText.trim(), { forceAside: asideModeRef.current });
         resetTranscript();
       }
     }
@@ -225,7 +261,8 @@ export default function DrillPage() {
       isFetchingSuggestions
     ) return;
 
-    const lastAiMessage = [...messages].reverse().find((m) => m.role === 'ai');
+    const roleplayMessages = roleplayHistory(messages);
+    const lastAiMessage = [...roleplayMessages].reverse().find((m) => m.role === 'ai');
     if (!lastAiMessage) return;
 
     try {
@@ -237,7 +274,7 @@ export default function DrillPage() {
         body: JSON.stringify({
           scenarioId: scenario.id,
           proficiencyLevel,
-          conversationHistory: messages,
+          conversationHistory: roleplayMessages,
           lastAiMessage: lastAiMessage.content,
           language: scenario.language,
         }),
@@ -278,7 +315,7 @@ export default function DrillPage() {
 
     const text = textInput;
     setTextInput('');
-    await sendMessage(text);
+    await sendMessage(text, { forceAside: asideMode });
   };
 
   const handleSuggestionSelect = async (text: string) => {
@@ -300,7 +337,7 @@ export default function DrillPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           scenarioId: scenario.id,
-          messages: messages.filter((m) => m.id !== 'initial'),
+          messages: roleplayHistory(messages).filter((m) => m.id !== 'initial'),
           language: scenario.language,
         }),
       });
@@ -327,12 +364,13 @@ export default function DrillPage() {
     await fetchEvaluation();
   };
 
+  const roleplayMessages = roleplayHistory(messages);
   const metrics: ConversationMetrics = {
     speakingTimeSeconds: totalSpeakingTime,
-    turnCount: messages.filter((m) => m.role === 'user').length,
+    turnCount: roleplayMessages.filter((m) => m.role === 'user').length,
     meaningUnderstoodRate: 0.9,
-    userUtterances: messages.filter((m) => m.role === 'user').length,
-    aiUtterances: messages.filter((m) => m.role === 'ai').length,
+    userUtterances: roleplayMessages.filter((m) => m.role === 'user').length,
+    aiUtterances: roleplayMessages.filter((m) => m.role === 'ai').length,
   };
 
   if (!scenario) {
@@ -530,6 +568,24 @@ export default function DrillPage() {
                   Text
                 </button>
               </div>
+            </div>
+
+            {/* Aside toggle — arms the next message as an out-of-character side question,
+                reachable from both Voice and Text mode */}
+            <div className="flex justify-center mb-4">
+              <button
+                type="button"
+                onClick={() => setAsideMode((prev) => !prev)}
+                disabled={isLoading || drillEnded}
+                aria-pressed={asideMode}
+                className={`px-4 py-1.5 font-ui text-[10px] uppercase tracking-[0.2em] rounded-sm border border-dashed transition-colors duration-fast disabled:opacity-30 ${
+                  asideMode
+                    ? 'border-accent text-accent'
+                    : 'border-[var(--color-text-secondary)]/50 text-text-secondary hover:text-dark'
+                }`}
+              >
+                {asideMode ? 'Aside armed · next message' : 'Ask a side question'}
+              </button>
             </div>
 
             {/* Input Controls Container layout */}

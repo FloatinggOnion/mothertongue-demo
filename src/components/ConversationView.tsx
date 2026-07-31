@@ -14,6 +14,10 @@ export function MessageBubble({
 }: MessageBubbleProps) {
   const [isHovered, setIsHovered] = useState(false);
   const isUser = message.role === 'user';
+  // Asides (both the user's question and the tutor's out-of-character
+  // answer) render with a muted, dashed, unmistakably-not-roleplay
+  // treatment. Roleplay bubbles below are untouched.
+  const isAside = message.kind === 'aside-question' || message.kind === 'aside-answer';
 
   return (
     <div
@@ -21,19 +25,27 @@ export function MessageBubble({
     >
       <div
         className={`relative max-w-[80%] px-4 py-3 rounded-2xl ${
-          isUser
-            ? 'bg-[var(--color-accent)] text-[var(--color-text-inverse)] rounded-br-sm'
-            : 'bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-divider)] rounded-bl-sm'
+          isAside
+            ? 'bg-[var(--color-paper)] border border-dashed border-[var(--color-text-secondary)]/50 text-[var(--color-text-secondary)]'
+            : isUser
+              ? 'bg-[var(--color-accent)] text-[var(--color-text-inverse)] rounded-br-sm'
+              : 'bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-divider)] rounded-bl-sm'
         }`}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
       >
+        {isAside && (
+          <span className="block font-ui text-[9px] uppercase tracking-[0.2em] text-[var(--color-text-secondary)] mb-1">
+            {message.kind === 'aside-answer' ? 'Aside · explanation' : 'Aside'}
+          </span>
+        )}
+
         <p className="text-sm md:text-base leading-relaxed font-body">
           {message.content}
         </p>
 
-        {/* Inline translation — fades in on hover */}
-        {message.translation && (
+        {/* Inline translation — fades in on hover. Skipped entirely for asides (aside answers are already plain English). */}
+        {!isAside && message.translation && (
           <p
             className={`text-xs mt-2 pt-2 border-t transition-all duration-200 font-ui ${
               isUser
