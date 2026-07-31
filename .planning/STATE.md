@@ -86,6 +86,12 @@ None yet.
 - [Research]: Shared vs. separate adaptive level state for scenarios vs. freeform is an open design question — resolve before Phase 4
 - [Research]: Better Auth anonymous session migration path (anonymous → registered, preserving history) needs verification before Phase 2
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260730-wq7 | Add inline conversation asides so users can ask a quick side question mid-scenario without polluting roleplay history, and harden scenario system prompts so the AI never swaps into the user's role | 2026-07-31 | 2d6c9b1 | Code complete, tests/build green — Task 5 browser verification pending (human required) | [260730-wq7-add-inline-conversation-asides-so-users-](./quick/260730-wq7-add-inline-conversation-asides-so-users-/) |
+
 ## Session Continuity
 
 Last session: 2026-03-21T12:59:18.265Z
