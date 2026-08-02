@@ -168,13 +168,13 @@ function SuccessState({
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={onTryAgain}
-            className="flex-1 py-3 px-4 rounded-sm bg-[#C4622D] text-[#F5F0E8] font-ui text-[11px] uppercase tracking-widest hover:bg-[#A84E22] transition-colors"
+            className="flex-1 py-3 px-4 rounded-sm bg-[#C4622D] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest hover:bg-[#A84E22] transition-colors"
           >
             Try Again
           </button>
           <button
             onClick={onClose}
-            className="flex-1 py-3 px-4 rounded-sm bg-[#2C1810] text-[#F5F0E8] font-ui text-[11px] uppercase tracking-widest hover:bg-[#C4622D] transition-colors"
+            className="flex-1 py-3 px-4 rounded-sm bg-[#2C1810] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest hover:bg-[#C4622D] transition-colors"
           >
             Back to Scenarios
           </button>
@@ -185,7 +185,7 @@ function SuccessState({
 }
 
 function ErrorState({
-  errorMessage: _errorMessage,
+  errorMessage,
   onRetry,
   onClose,
 }: Extract<FeedbackCardProps, { state: 'error' }>) {
@@ -201,20 +201,20 @@ function ErrorState({
             Something went wrong
           </div>
           <p className="font-body text-[#2C1810] text-sm leading-relaxed">
-            Your practice session was great — tap below to try getting feedback again.
+            {errorMessage}
           </p>
         </div>
 
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={onRetry}
-            className="flex-1 py-3 px-4 rounded-sm bg-[#E8955A] text-[#F5F0E8] font-ui text-[11px] uppercase tracking-widest hover:bg-[#B7733B] transition-colors"
+            className="flex-1 py-3 px-4 rounded-sm bg-[#E8955A] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest hover:bg-[#B7733B] transition-colors"
           >
             Retry evaluation
           </button>
           <button
             onClick={onClose}
-            className="flex-1 py-3 px-4 rounded-sm bg-[#2C1810] text-[#F5F0E8] font-ui text-[11px] uppercase tracking-widest hover:bg-[#E8955A] transition-colors"
+            className="flex-1 py-3 px-4 rounded-sm bg-[#2C1810] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest hover:bg-[#E8955A] transition-colors"
           >
             Skip &amp; Go Home
           </button>
@@ -239,10 +239,10 @@ function ScoreBar({
       <div className="flex-1 h-1.5 bg-[#D9D2C7] rounded-full overflow-hidden">
         <div
           className="h-full rounded-full transition-all duration-300"
-          style={{ width: `${score * 10}%`, backgroundColor: color }}
+          style={{ width: `${score}%`, backgroundColor: color }}
         />
       </div>
-      <div className="w-8 font-ui text-[11px] text-[#A89B8C] text-right">{score}/10</div>
+      <div className="w-14 font-ui text-[11px] text-[#A89B8C] text-right">{score}/100</div>
     </div>
   );
 }

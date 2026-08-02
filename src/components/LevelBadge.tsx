@@ -48,13 +48,13 @@ export function LevelBadge({ level, manualOverride, onLevelChange, onClearOverri
       </button>
 
       {open && (
-        <div className="absolute top-full right-0 mt-2 var(--color-surface) border var(--color-divider) rounded-xl shadow-xl z-50 min-w-[180px] py-1 animate-in fade-in zoom-in-95 duration-150">
+        <div className="absolute top-full right-0 mt-2 bg-[var(--color-surface)] border border-[var(--color-divider)] rounded-xl shadow-xl z-50 min-w-[180px] py-1 animate-in fade-in zoom-in-95 duration-150">
           {(['beginner', 'intermediate', 'advanced'] as ProficiencyLevel[]).map((l) => (
             <button
               key={l}
               onClick={() => { onLevelChange(l); setOpen(false); }}
-              className={`w-full text-left px-4 py-2 text-sm transition-colors hover:bg-white/10 ${
-                l === level ? 'var(--color-text) font-medium' : 'var(--color-text-secondary)'
+              className={`w-full text-left px-4 py-2 text-sm transition-colors hover:bg-[var(--color-paper)] ${
+                l === level ? 'text-[var(--color-text)] font-medium' : 'text-[var(--color-text-secondary)]'
               }`}
             >
               {l === level ? '✓ ' : '  '}{LEVEL_LABELS[l]}
@@ -62,10 +62,10 @@ export function LevelBadge({ level, manualOverride, onLevelChange, onClearOverri
           ))}
           {manualOverride && (
             <>
-              <div className="border-t border-white/10 my-1" />
+              <div className="border-t border-[var(--color-divider)] my-1" />
               <button
                 onClick={() => { onClearOverride(); setOpen(false); }}
-                className="w-full text-left px-4 py-2 text-xs text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors"
+                className="w-full text-left px-4 py-2 text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-paper)] transition-colors"
               >
                 Let the app decide
               </button>
