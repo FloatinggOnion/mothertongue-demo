@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getReplySuggestions } from '@/services/groq';
+import { getReplySuggestions } from '@/services/llm';
 import { getScenarioById } from '@/config/scenarios';
 import { SuggestionsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 

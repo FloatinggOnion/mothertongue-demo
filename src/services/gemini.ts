@@ -1,3 +1,4 @@
+import { GoogleGenAI } from '@google/genai';
 import { Message, ProficiencyLevel, ReplySuggestion, Evaluation, ProficiencyAssessment } from '@/types';
 import {
   buildPartnerSystemPrompt,
@@ -14,61 +15,90 @@ import {
   buildTranslationSystemPrompt,
 } from './promptLib';
 
-// Helper to get API configurations cleanly
-const getApiKey = () => process.env.GROQ_API_KEY || '';
-const getBaseUrl = () => 'https://api.groq.com/openai/v1/chat/completions';
-const MODEL = 'llama-3.3-70b-versatile';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-pro';
+
+type GeminiContent = { role: 'user' | 'model'; parts: { text: string }[] };
+
+let client: GoogleGenAI | null = null;
 
 /**
- * Helper to format application message history into the OpenAI-compatible
- * chat message shape expected by the Groq API.
+ * Lazily constructs a singleton Vertex AI client, reusing the same
+ * Google Cloud service-account credentials already configured for the
+ * Speech-to-Text and Text-to-Speech services.
  */
-function formatGroqHistory(history: Message[]): { role: 'user' | 'assistant'; content: string }[] {
+function getGeminiClient(): GoogleGenAI {
+  if (!client) {
+    client = new GoogleGenAI({
+      vertexai: true,
+      project: process.env.GOOGLE_CLOUD_PROJECT,
+      location: process.env.GOOGLE_CLOUD_LOCATION || 'us-central1',
+      googleAuthOptions: {
+        credentials: {
+          client_email: process.env.GOOGLE_CLIENT_EMAIL,
+          private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        },
+      },
+    });
+  }
+  return client;
+}
+
+/**
+ * Helper to format application message history into Gemini's `contents`
+ * shape. Gemini uses 'model' (not 'assistant') for the AI turn role.
+ */
+function formatGeminiHistory(history: Message[]): GeminiContent[] {
   return history.map((msg) => ({
-    role: msg.role === 'ai' ? 'assistant' : 'user',
-    content: msg.content,
+    role: msg.role === 'ai' ? 'model' : 'user',
+    parts: [{ text: msg.content }],
   }));
 }
 
 /**
- * Sends a chat completion request to Groq and returns the raw message content string.
+ * Gemini's `contents` array only supports 'user'/'model' roles — there is
+ * no mid-conversation system turn. Operator-level asides (the role-drift
+ * reinforcement reminder, the corrective retry note) are folded into a
+ * clearly-labeled 'user' turn instead, so they still land in the prompt
+ * without being mistaken for something the learner said.
  */
-async function callGroq(
-  messages: { role: string; content: string }[],
+function systemAside(text: string): GeminiContent {
+  return { role: 'user', parts: [{ text: `[SYSTEM NOTE — an instruction from the app, not the human user] ${text}` }] };
+}
+
+/**
+ * Sends a generateContent request to Gemini on Vertex AI and returns the
+ * raw text output.
+ */
+async function callGemini(
+  systemPrompt: string,
+  contents: GeminiContent[],
   options: { json?: boolean; temperature?: number } = {}
 ): Promise<string> {
-  const apiKey = getApiKey();
   const { json = false, temperature = 0.7 } = options;
 
-  const response = await fetch(getBaseUrl(), {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
+  try {
+    const response = await getGeminiClient().models.generateContent({
       model: MODEL,
-      messages,
-      temperature,
-      ...(json ? { response_format: { type: 'json_object' } } : {}),
-    }),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Groq API Error: ${response.status} ${response.statusText} ${errorText}`);
+      contents,
+      config: {
+        systemInstruction: systemPrompt,
+        temperature,
+        ...(json ? { responseMimeType: 'application/json' } : {}),
+      },
+    });
+    return response.text || '';
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Gemini API Error: ${message}`);
   }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || '';
 }
 
 /**
  * Detects whether a generated partner reply has drifted into voicing the
  * user's side of the conversation. Stage 1 is a free heuristic that always
- * runs. Stage 2 (a single cheap Groq call) only fires when the heuristic is
- * clean AND the conversation is long enough that drift risk justifies the
- * cost. Any failure in the LLM check resolves to false — never block a
+ * runs. Stage 2 (a single cheap Gemini call) only fires when the heuristic
+ * is clean AND the conversation is long enough that drift risk justifies
+ * the cost. Any failure in the LLM check resolves to false — never block a
  * valid reply on a failed check.
  */
 export async function detectRoleDrift(
@@ -88,11 +118,9 @@ export async function detectRoleDrift(
   const systemPrompt = buildDriftCheckSystemPrompt(aiRole);
 
   try {
-    const rawText = await callGroq(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: reply },
-      ],
+    const rawText = await callGemini(
+      systemPrompt,
+      [{ role: 'user', parts: [{ text: reply }] }],
       { json: true, temperature: 0 }
     );
     const parsed = JSON.parse(rawText || '{}');
@@ -110,7 +138,7 @@ export type TurnKind = 'roleplay' | 'aside';
  * out-of-character meta question ("aside") about the language itself.
  *
  * Stage 1 is a free heuristic regex match. Stage 2 falls back to a single
- * cheap Groq call when the heuristic doesn't match. Fail-safe direction:
+ * cheap Gemini call when the heuristic doesn't match. Fail-safe direction:
  * any error, empty content, or unrecognized value resolves to 'roleplay' —
  * misrouting a roleplay line breaks the scene, whereas a missed aside is
  * recoverable via the manual Ask button.
@@ -123,11 +151,9 @@ export async function classifyUserTurn(userMessage: string, language?: string): 
   const systemPrompt = buildClassifyTurnSystemPrompt(language);
 
   try {
-    const rawText = await callGroq(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
+    const rawText = await callGemini(
+      systemPrompt,
+      [{ role: 'user', parts: [{ text: userMessage }] }],
       { json: true, temperature: 0 }
     );
     const parsed = JSON.parse(rawText || '{}');
@@ -154,11 +180,9 @@ export async function getAsideAnswer(
   const systemPrompt = buildAsideAnswerSystemPrompt(proficiencyLevel, activeLang);
 
   try {
-    const rawText = await callGroq(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userQuestion },
-      ],
+    const rawText = await callGemini(
+      systemPrompt,
+      [{ role: 'user', parts: [{ text: userQuestion }] }],
       { json: true, temperature: 0.3 }
     );
     const parsed = JSON.parse(rawText || '{}');
@@ -183,35 +207,30 @@ export async function getPartnerResponse(
   const aiRole = scenario?.aiRole || 'Conversation Partner';
   const systemPrompt = buildPartnerSystemPrompt(scenario, proficiencyLevel, activeLang);
 
-  const historyMessages = formatGroqHistory(conversationHistory);
-  const messages: { role: string; content: string }[] = [
-    { role: 'system', content: systemPrompt },
-    ...historyMessages,
-  ];
+  const contents: GeminiContent[] = [...formatGeminiHistory(conversationHistory)];
 
   // Periodic reinforcement: on longer histories, insert a recency-biased
   // reminder immediately before the newest user turn — it survives long
   // histories better than the far-away opening system prompt.
   if (conversationHistory.length >= 6) {
-    messages.push({ role: 'system', content: buildRoleReinforcement(aiRole) });
+    contents.push(systemAside(buildRoleReinforcement(aiRole)));
   }
-  messages.push({ role: 'user', content: userMessage });
+  contents.push({ role: 'user', parts: [{ text: userMessage }] });
 
   try {
-    const rawText = await callGroq(messages, { json: true, temperature: 0.7 });
+    const rawText = await callGemini(systemPrompt, contents, { json: true, temperature: 0.7 });
     const parsed = JSON.parse(rawText || '{}');
     let replyText = parsed.reply || '';
 
     const drifted = await detectRoleDrift(replyText, scenario, conversationHistory.length);
     if (drifted) {
-      const correctiveMessages: { role: string; content: string }[] = [
-        ...messages,
-        {
-          role: 'system',
-          content: `Your previous attempt broke the role boundary by speaking for the user. This attempt must contain only ${aiRole}'s single utterance — never the user's line, never a speaker label, never narration for the user.`,
-        },
+      const correctiveContents: GeminiContent[] = [
+        ...contents,
+        systemAside(
+          `Your previous attempt broke the role boundary by speaking for the user. This attempt must contain only ${aiRole}'s single utterance — never the user's line, never a speaker label, never narration for the user.`
+        ),
       ];
-      const retryRawText = await callGroq(correctiveMessages, { json: true, temperature: 0.7 });
+      const retryRawText = await callGemini(systemPrompt, correctiveContents, { json: true, temperature: 0.7 });
       const retryParsed = JSON.parse(retryRawText || '{}');
       // Use the retried reply unconditionally — no third attempt, no recursion.
       replyText = retryParsed.reply || replyText;
@@ -249,14 +268,13 @@ export async function getReplySuggestions(
 
   const suggestionPrompt = `Based on the conversation above, generate 3 alternative options for how the user could respond next to your last message: "${lastAiMessage}"`;
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...formatGroqHistory(conversationHistory),
-    { role: 'user', content: suggestionPrompt },
+  const contents: GeminiContent[] = [
+    ...formatGeminiHistory(conversationHistory),
+    { role: 'user', parts: [{ text: suggestionPrompt }] },
   ];
 
   try {
-    const rawText = await callGroq(messages, { json: true, temperature: 0.6 });
+    const rawText = await callGemini(systemPrompt, contents, { json: true, temperature: 0.6 });
     return JSON.parse(rawText || '{"suggestions":[]}');
   } catch (error) {
     console.error('Error generating suggestions:', error);
@@ -275,14 +293,13 @@ export async function evaluateConversation(
   const activeLang = language || scenario?.language || 'yoruba';
   const systemPrompt = buildEvaluationSystemPrompt(activeLang);
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...formatGroqHistory(conversationHistory),
-    { role: 'user', content: 'Please evaluate the conversation above.' },
+  const contents: GeminiContent[] = [
+    ...formatGeminiHistory(conversationHistory),
+    { role: 'user', parts: [{ text: 'Please evaluate the conversation above.' }] },
   ];
 
   try {
-    const rawText = await callGroq(messages, { json: true, temperature: 0.3 });
+    const rawText = await callGemini(systemPrompt, contents, { json: true, temperature: 0.3 });
     return JSON.parse(rawText || '{}');
   } catch (error) {
     console.error('Error evaluating conversation:', error);
@@ -301,14 +318,13 @@ export async function assessProficiency(
 ): Promise<ProficiencyAssessment> {
   const systemPrompt = buildProficiencyAssessmentSystemPrompt(proficiencyLevel, language);
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...formatGroqHistory(conversationHistory),
-    { role: 'user', content: 'Please assess my proficiency level based on the conversation above.' },
+  const contents: GeminiContent[] = [
+    ...formatGeminiHistory(conversationHistory),
+    { role: 'user', parts: [{ text: 'Please assess my proficiency level based on the conversation above.' }] },
   ];
 
   try {
-    const rawText = await callGroq(messages, { json: true, temperature: 0.3 });
+    const rawText = await callGemini(systemPrompt, contents, { json: true, temperature: 0.3 });
     return JSON.parse(rawText || `{"recommendedLevel":"${proficiencyLevel}","rationale":"","confidence":"low"}`);
   } catch (error) {
     console.error('Error assessing proficiency:', error);
@@ -325,11 +341,9 @@ async function translateToEnglish(text: string, sourceLanguage: string): Promise
   const systemPrompt = buildTranslationSystemPrompt(sourceLanguage);
 
   try {
-    const rawText = await callGroq(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: text },
-      ],
+    const rawText = await callGemini(
+      systemPrompt,
+      [{ role: 'user', parts: [{ text }] }],
       { json: false, temperature: 0.3 }
     );
     return rawText.trim();

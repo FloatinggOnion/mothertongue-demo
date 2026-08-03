@@ -8,7 +8,7 @@ const { classifyUserTurnMock, getAsideAnswerMock, getPartnerResponseMock, getSce
   getScenarioByIdMock: vi.fn(),
 }));
 
-vi.mock('@/services/groq', () => ({
+vi.mock('@/services/llm', () => ({
   classifyUserTurn: classifyUserTurnMock,
   getAsideAnswer: getAsideAnswerMock,
   getPartnerResponse: getPartnerResponseMock,
