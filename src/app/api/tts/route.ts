@@ -26,43 +26,36 @@ export async function POST(request: NextRequest) {
     const voiceGender = gender ?? 'male';
     console.log('[TTS] Request:', { textLength: text.length, gender: voiceGender, language });
 
-    // ==========================================
-    // PATH A: HAUSA PIPELINE (Modal)
-    // ==========================================
-    if (language?.toLowerCase() === 'hausa') {
-      const modalUrl = process.env.HAUSA_MODAL_TTS_URL;
+// ==========================================
+// PATH A: HAUSA PIPELINE (Modal)
+// ==========================================
+if (language?.toLowerCase() === 'hausa') {
+  const modalUrl = process.env.HAUSA_MODAL_TTS_URL;
 
-      if (!modalUrl) {
-        return NextResponse.json({ error: 'HAUSA_MODAL_TTS_URL not configured' }, { status: 500 });
-      }
+  if (!modalUrl) {
+    return NextResponse.json({ error: 'Hausa TTS URL not configured' }, { status: 500 });
+  }
 
-      console.log('[TTS Router] Dispatched Hausa TTS to Modal...');
+  console.log('[TTS Router] Dispatched Hausa TTS to Modal...');
 
-      const modalResponse = await fetch(modalUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text,
-          gender: voiceGender,
-        }),
-      });
+  const modalResponse = await fetch(modalUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text }),
+  });
 
-      if (!modalResponse.ok) {
-        const details = await modalResponse.text();
-        console.error('[TTS Router] Modal Hausa TTS failed:', modalResponse.status, details);
-        return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
-      }
+  if (!modalResponse.ok) {
+    console.error('[TTS Router] Hausa TTS failed:', modalResponse.statusText);
+    return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
+  }
 
-      const audioBuffer = await modalResponse.arrayBuffer();
-      return new NextResponse(audioBuffer, {
-        headers: {
-          'Content-Type': 'audio/mpeg',
-        },
-      });
-    }
-
+  const audioBuffer = await modalResponse.arrayBuffer();
+  return new NextResponse(audioBuffer, {
+    headers: {
+      'Content-Type': 'audio/wav',
+    },
+  });
+}
     // ==========================================
     // PATH B: YORUBA PIPELINE (Google Cloud TTS)
     // ==========================================

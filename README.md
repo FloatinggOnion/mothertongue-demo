@@ -37,7 +37,7 @@ All server-side transcription runs through **Google Cloud Speech-to-Text v2 (Chi
 ### B. Speech Synthesis (TTS)
 TTS is routed by language, since no single vendor covers both well:
 *   **Yorùbá**: **Google Cloud Text-to-Speech** (`yo-NG`), with `ssmlGender` wired to each scenario's `gender` field for male/female voice selection.
-*   **Hausa**: **ElevenLabs** (`eleven_v3`, `language_code: 'hau'`), with distinct Voice IDs per gender.
+*   **Hausa**: **Intron** (`voice_language: 'ha'`) — a dedicated local-language Hausa TTS model, rather than a generic multilingual model with Hausa bolted on.
 *   **Igbo**: not yet supported — no vendor evaluated so far offers a production-ready Igbo TTS voice. See `.planning/` for status.
 
 ---
@@ -73,7 +73,7 @@ This repository contains the source code for the Mothertongue experimental platf
 *   Node.js 18+
 *   Groq API Key
 *   Google Cloud service account with Speech-to-Text + Text-to-Speech APIs enabled
-*   ElevenLabs API Key (Hausa TTS only)
+*   Intron API Key (Hausa TTS only)
 
 ### Installation
 
