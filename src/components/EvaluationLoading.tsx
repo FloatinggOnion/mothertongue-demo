@@ -57,7 +57,7 @@ export function EvaluationLoading({ isVisible }: EvaluationLoadingProps) {
             </div>
           </div>
           
-          <h2 className="text-2xl font-bold text-[var(--color-text)] mb-4">{status}</h2>
+          <h2 className="font-display text-2xl text-[var(--color-text)] mb-4">{status}</h2>
 
           {/* Loading spinner */}
           <div className="flex justify-center mb-4">

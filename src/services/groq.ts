@@ -266,14 +266,24 @@ export async function getReplySuggestions(
 
 /**
  * Evaluates the conversation based on the user's proficiency level and scenario.
+ *
+ * Key improvements over the old version:
+ *  - `proficiencyLevel` is threaded in so the rubric is level-matched.
+ *  - Per-level anchors (80-100 / 50-79 / 1-49) give the model a concrete bar.
+ *  - Reasoning fields force the model to justify each score before committing.
+ *  - STT context tells the model not to penalise transcription noise as grammar.
+ *  - `temperature: 0` removes run-to-run variance for a deterministic task.
+ *  - `overallScore` is derived in code (average of three sub-scores / 30) so it
+ *    can never contradict the sub-scores.
  */
 export async function evaluateConversation(
   scenario: any,
   conversationHistory: Message[],
-  language?: string
+  language?: string,
+  proficiencyLevel: ProficiencyLevel = 'beginner'
 ): Promise<Evaluation> {
   const activeLang = language || scenario?.language || 'yoruba';
-  const systemPrompt = buildEvaluationSystemPrompt(activeLang);
+  const systemPrompt = buildEvaluationSystemPrompt(activeLang, proficiencyLevel);
 
   const messages = [
     { role: 'system', content: systemPrompt },
@@ -282,8 +292,24 @@ export async function evaluateConversation(
   ];
 
   try {
-    const rawText = await callGroq(messages, { json: true, temperature: 0.3 });
-    return JSON.parse(rawText || '{}');
+    const rawText = await callGroq(messages, { json: true, temperature: 0 });
+    const parsed = JSON.parse(rawText || '{}');
+
+    const fluencyScore = Number(parsed.fluencyScore) || 0;
+    const grammarScore = Number(parsed.grammarScore) || 0;
+    const confidenceScore = Number(parsed.confidenceScore) || 0;
+
+    return {
+      strength: parsed.strength || '',
+      strengthExample: parsed.strengthExample,
+      improvement: parsed.improvement || '',
+      correctedSentence: parsed.correctedSentence || '',
+      fluencyScore,
+      grammarScore,
+      confidenceScore,
+      // Derived in code, not model-guessed — keeps it mathematically consistent with the sub-scores.
+      overallScore: Math.round((fluencyScore + grammarScore + confidenceScore) / 30),
+    };
   } catch (error) {
     console.error('Error evaluating conversation:', error);
     throw error;

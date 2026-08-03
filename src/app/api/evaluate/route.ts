@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
       scenarioId: validatedScenarioId,
       messages,
       language,
+      proficiencyLevel,
     } = validationResult.data;
 
     scenarioId = validatedScenarioId;
@@ -37,7 +38,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const evaluation = await evaluateConversation(scenario, messages, language);
+    // Minimum-content guardrail: a single user turn doesn't have enough signal
+    // for a reliable score — surface a friendly 400 instead of a confident but
+    // meaningless number.
+    const userTurns = messages.filter((m) => m.role === 'user');
+    if (userTurns.length < 2) {
+      return NextResponse.json(
+        { error: 'Not enough conversation yet to evaluate — keep chatting a bit longer.' },
+        { status: 400 }
+      );
+    }
+
+    const evaluation = await evaluateConversation(scenario, messages, language, proficiencyLevel);
 
     return NextResponse.json(evaluation);
   } catch (error) {

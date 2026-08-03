@@ -284,14 +284,20 @@ export async function getReplySuggestions(
 
 /**
  * Evaluates the conversation based on the user's proficiency level and scenario.
+ *
+ * Level-matched rubric, reasoning-before-score, and code-derived overallScore
+ * — see buildEvaluationSystemPrompt in promptLib.ts for the rationale. This
+ * mirrors groq.ts's evaluateConversation exactly so scoring behavior doesn't
+ * silently shift when switching providers.
  */
 export async function evaluateConversation(
   scenario: any,
   conversationHistory: Message[],
-  language?: string
+  language?: string,
+  proficiencyLevel: ProficiencyLevel = 'beginner'
 ): Promise<Evaluation> {
   const activeLang = language || scenario?.language || 'yoruba';
-  const systemPrompt = buildEvaluationSystemPrompt(activeLang);
+  const systemPrompt = buildEvaluationSystemPrompt(activeLang, proficiencyLevel);
 
   const contents: GeminiContent[] = [
     ...formatGeminiHistory(conversationHistory),
@@ -299,8 +305,24 @@ export async function evaluateConversation(
   ];
 
   try {
-    const rawText = await callGemini(systemPrompt, contents, { json: true, temperature: 0.3 });
-    return JSON.parse(rawText || '{}');
+    const rawText = await callGemini(systemPrompt, contents, { json: true, temperature: 0 });
+    const parsed = JSON.parse(rawText || '{}');
+
+    const fluencyScore = Number(parsed.fluencyScore) || 0;
+    const grammarScore = Number(parsed.grammarScore) || 0;
+    const confidenceScore = Number(parsed.confidenceScore) || 0;
+
+    return {
+      strength: parsed.strength || '',
+      strengthExample: parsed.strengthExample,
+      improvement: parsed.improvement || '',
+      correctedSentence: parsed.correctedSentence || '',
+      fluencyScore,
+      grammarScore,
+      confidenceScore,
+      // Derived in code, not model-guessed — keeps it mathematically consistent with the sub-scores.
+      overallScore: Math.round((fluencyScore + grammarScore + confidenceScore) / 30),
+    };
   } catch (error) {
     console.error('Error evaluating conversation:', error);
     throw error;

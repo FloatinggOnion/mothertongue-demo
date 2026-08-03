@@ -40,24 +40,95 @@ describe('Groq Service', () => {
   });
 
   describe('evaluateConversation()', () => {
-    it('returns the parsed evaluation on a successful response', async () => {
-      const evaluation = {
+    it('returns a correctly shaped evaluation with overallScore derived from sub-scores', async () => {
+      // The model response deliberately includes a wrong overallScore (99) to prove
+      // the function ignores it and computes the value in code instead.
+      const modelResponse = {
         strength: 'Good vocabulary',
         strengthExample: 'Bawo ni',
         improvement: 'Work on tone',
         correctedSentence: 'Bawo ni o se wa',
-        overallScore: 7,
+        fluencyReasoning: 'User produced a short correct opener.',
         fluencyScore: 60,
+        grammarReasoning: 'Basic grammar was mostly correct.',
         grammarScore: 65,
+        confidenceReasoning: 'User responded without hesitation.',
         confidenceScore: 70,
+        overallScore: 99, // intentionally wrong — should be ignored
       };
 
-      mockFetchOnce({ choices: [{ message: { content: JSON.stringify(evaluation) } }] });
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify(modelResponse) } }] });
 
       const scenario = { id: 'test', language: 'yoruba' } as any;
       const messages: any[] = [{ role: 'user', content: 'Bawo ni' }];
 
-      await expect(evaluateConversation(scenario, messages)).resolves.toEqual(evaluation);
+      const result = await evaluateConversation(scenario, messages, undefined, 'beginner');
+
+      // overallScore must be derived: Math.round((60 + 65 + 70) / 30) = Math.round(6.5) = 7
+      expect(result.overallScore).toBe(Math.round((60 + 65 + 70) / 30));
+      expect(result.fluencyScore).toBe(60);
+      expect(result.grammarScore).toBe(65);
+      expect(result.confidenceScore).toBe(70);
+      expect(result.strength).toBe('Good vocabulary');
+    });
+
+    it('includes the correct proficiencyLevel rubric text in the outgoing system prompt', async () => {
+      const modelResponse = {
+        strength: 'S', strengthExample: 'E', improvement: 'I', correctedSentence: 'C',
+        fluencyReasoning: 'R', fluencyScore: 50,
+        grammarReasoning: 'R', grammarScore: 50,
+        confidenceReasoning: 'R', confidenceScore: 50,
+      };
+
+      // beginner call
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify(modelResponse) } }] });
+      const scenario = { id: 'test', language: 'yoruba' } as any;
+      await evaluateConversation(scenario, [], undefined, 'beginner');
+
+      const beginnerBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+      const beginnerSystem: string = beginnerBody.messages[0].content;
+      expect(beginnerSystem).toContain('BEGINNER');
+      expect(beginnerSystem).toContain('"beginner" level');
+
+      vi.clearAllMocks();
+      global.fetch = vi.fn() as any;
+
+      // advanced call
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify(modelResponse) } }] });
+      await evaluateConversation(scenario, [], undefined, 'advanced');
+
+      const advancedBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+      const advancedSystem: string = advancedBody.messages[0].content;
+      expect(advancedSystem).toContain('ADVANCED');
+      expect(advancedSystem).toContain('"advanced" level');
+      // Beginner rubric must NOT appear when level is advanced
+      expect(advancedSystem).not.toContain('BEGINNER');
+    });
+
+    it('overallScore equals Math.round((fluency+grammar+confidence)/30) for multiple sub-score combos', async () => {
+      const combos = [
+        { f: 80, g: 80, c: 80 }, // 240/30 = 8
+        { f: 100, g: 100, c: 100 }, // 300/30 = 10
+        { f: 30, g: 20, c: 10 }, // 60/30 = 2
+        { f: 55, g: 60, c: 65 }, // 180/30 = 6
+      ];
+
+      for (const { f, g, c } of combos) {
+        global.fetch = vi.fn() as any;
+        const modelResponse = {
+          strength: 'S', strengthExample: 'E', improvement: 'I', correctedSentence: 'C',
+          fluencyReasoning: 'R', fluencyScore: f,
+          grammarReasoning: 'R', grammarScore: g,
+          confidenceReasoning: 'R', confidenceScore: c,
+          overallScore: 1, // intentionally wrong — should be ignored
+        };
+        mockFetchOnce({ choices: [{ message: { content: JSON.stringify(modelResponse) } }] });
+
+        const scenario = { id: 'test', language: 'yoruba' } as any;
+        const result = await evaluateConversation(scenario, [], undefined, 'intermediate');
+
+        expect(result.overallScore).toBe(Math.round((f + g + c) / 30));
+      }
     });
 
     it('throws on JSON parse failure instead of returning a fallback', async () => {
