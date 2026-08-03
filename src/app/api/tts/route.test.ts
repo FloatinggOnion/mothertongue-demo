@@ -21,8 +21,7 @@ describe('POST /api/tts', () => {
   beforeEach(() => {
     synthesizeSpeechMock.mockReset();
     global.fetch = vi.fn() as any;
-    process.env.ELEVENLABS_API_KEY = 'test-key';
-    process.env.ELEVENLABS_VOICE_ID = 'voice-fixed';
+    process.env.INTRON_API_KEY = 'test-key';
   });
 
   afterEach(() => {
@@ -61,49 +60,45 @@ describe('POST /api/tts', () => {
     );
   });
 
-  it('synthesizes Hausa speech via ElevenLabs using the configured voice id', async () => {
-    (global.fetch as any).mockResolvedValueOnce({
-      ok: true,
-      arrayBuffer: async () => new ArrayBuffer(8),
-    });
+  it('synthesizes Hausa speech via Intron, passing gender straight through', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          data: { audio_path: 'https://audio.intron.io/generated/abc.wav' },
+          status: 'Ok',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(8),
+      });
 
     const request = makeRequest({ text: 'Sannu', gender: 'female', language: 'hausa' });
     const response = await POST(request);
 
     expect(response.status).toBe(200);
-    expect(global.fetch).toHaveBeenCalledWith(
-      'https://api.elevenlabs.io/v1/text-to-speech/voice-fixed',
+    expect(global.fetch).toHaveBeenNthCalledWith(
+      1,
+      'https://infer.voice.intron.io/tts/v1/generate',
       expect.objectContaining({
         method: 'POST',
-        headers: expect.objectContaining({ 'xi-api-key': 'test-key' }),
+        headers: expect.objectContaining({ Authorization: 'Bearer test-key' }),
       })
     );
     const callBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     expect(callBody).toEqual({
       text: 'Sannu',
-      model_id: 'eleven_v3',
-      language_code: 'hau',
+      voice_language: 'hausa',
+      voice_accent: 'hausa',
+      voice_gender: 'female',
+      output_audio_format: 'wav',
     });
+    expect(global.fetch).toHaveBeenNthCalledWith(2, 'https://audio.intron.io/generated/abc.wav');
   });
 
-  it('uses the same voice id for Hausa regardless of gender', async () => {
-    (global.fetch as any).mockResolvedValue({
-      ok: true,
-      arrayBuffer: async () => new ArrayBuffer(8),
-    });
-
-    await POST(makeRequest({ text: 'Sannu', gender: 'male', language: 'hausa' }));
-    await POST(makeRequest({ text: 'Sannu', gender: 'female', language: 'hausa' }));
-
-    const urls = (global.fetch as any).mock.calls.map((call: unknown[]) => call[0]);
-    expect(urls).toEqual([
-      'https://api.elevenlabs.io/v1/text-to-speech/voice-fixed',
-      'https://api.elevenlabs.io/v1/text-to-speech/voice-fixed',
-    ]);
-  });
-
-  it('returns 500 when ElevenLabs is not configured', async () => {
-    delete process.env.ELEVENLABS_API_KEY;
+  it('returns 500 when Intron is not configured', async () => {
+    delete process.env.INTRON_API_KEY;
 
     const request = makeRequest({ text: 'Sannu', language: 'hausa' });
     const response = await POST(request);
@@ -111,12 +106,38 @@ describe('POST /api/tts', () => {
     expect(response.status).toBe(500);
   });
 
-  it('returns 500 when ElevenLabs request fails', async () => {
+  it('returns 500 when the Intron generate call fails', async () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: false,
       status: 500,
       text: async () => 'error details',
     });
+
+    const request = makeRequest({ text: 'Sannu', language: 'hausa' });
+    const response = await POST(request);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('returns 500 when the Intron response is missing audio_path', async () => {
+    (global.fetch as any).mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ data: {}, status: 'Ok' }),
+    });
+
+    const request = makeRequest({ text: 'Sannu', language: 'hausa' });
+    const response = await POST(request);
+
+    expect(response.status).toBe(500);
+  });
+
+  it('returns 500 when fetching the generated audio_path fails', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ data: { audio_path: 'https://audio.intron.io/generated/abc.wav' } }),
+      })
+      .mockResolvedValueOnce({ ok: false, status: 404 });
 
     const request = makeRequest({ text: 'Sannu', language: 'hausa' });
     const response = await POST(request);

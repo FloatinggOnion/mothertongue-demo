@@ -27,44 +27,56 @@ export async function POST(request: NextRequest) {
     console.log('[TTS] Request:', { textLength: text.length, gender: voiceGender, language });
 
     // ==========================================
-    // PATH A: HAUSA PIPELINE (ElevenLabs)
+    // PATH A: HAUSA PIPELINE (Intron)
     // ==========================================
     if (language?.toLowerCase() === 'hausa') {
-      const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.ELEVENLABS_VOICE_ID;
+      const apiKey = process.env.INTRON_API_KEY;
 
-      if (!apiKey || !voiceId) {
-        return NextResponse.json({ error: 'ElevenLabs Hausa TTS not configured' }, { status: 500 });
+      if (!apiKey) {
+        return NextResponse.json({ error: 'Intron Hausa TTS not configured' }, { status: 500 });
       }
 
-      console.log('[TTS Router] Dispatched Hausa TTS to ElevenLabs...');
+      console.log('[TTS Router] Dispatched Hausa TTS to Intron...');
 
-      const elevenLabsResponse = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-        {
-          method: 'POST',
-          headers: {
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text,
-            model_id: 'eleven_v3',
-            language_code: 'hau',
-          }),
-        }
-      );
+      const generateResponse = await fetch('https://infer.voice.intron.io/tts/v1/generate', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          voice_language: 'hausa',
+          voice_accent: 'hausa',
+          voice_gender: voiceGender,
+          output_audio_format: 'wav',
+        }),
+      });
 
-      if (!elevenLabsResponse.ok) {
-        const details = await elevenLabsResponse.text();
-        console.error('[TTS Router] ElevenLabs Hausa TTS failed:', elevenLabsResponse.status, details);
+      if (!generateResponse.ok) {
+        const details = await generateResponse.text();
+        console.error('[TTS Router] Intron Hausa TTS failed:', generateResponse.status, details);
         return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
       }
 
-      const audioBuffer = await elevenLabsResponse.arrayBuffer();
+      const generateData = await generateResponse.json();
+      const audioPath = generateData?.data?.audio_path;
+
+      if (!audioPath) {
+        console.error('[TTS Router] Intron response missing audio_path:', generateData);
+        return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
+      }
+
+      const audioResponse = await fetch(audioPath);
+      if (!audioResponse.ok) {
+        console.error('[TTS Router] Failed to fetch Intron audio_path:', audioResponse.status);
+        return NextResponse.json({ error: 'Failed to fetch generated Hausa speech' }, { status: 500 });
+      }
+
+      const audioBuffer = await audioResponse.arrayBuffer();
       return new NextResponse(audioBuffer, {
         headers: {
-          'Content-Type': 'audio/mpeg',
+          'Content-Type': 'audio/wav',
         },
       });
     }

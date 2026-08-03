@@ -1,9 +1,11 @@
 # Speech API Migration — Frontend Handover
 
 Backend-only migration: `/api/transcribe` and `/api/tts` now use Google Cloud (Chirp STT for
-Yoruba + Hausa, Google TTS for Yoruba) and ElevenLabs (`eleven_v3` TTS for Hausa) instead of the
-old Modal-hosted Hausa models. Igbo is **not** part of this migration — no vendor found so far has
-a production-ready Igbo TTS voice, so it stays out of scope.
+Yoruba + Hausa, Google TTS for Yoruba) and Intron (TTS for Hausa) instead of the old Modal-hosted
+Hausa models. Hausa TTS briefly went through ElevenLabs first but was swapped to Intron after
+voice-quality testing — Intron built Hausa as a dedicated local-language TTS model rather than a
+generic multilingual model with Hausa bolted on. Igbo is **not** part of this migration — no
+vendor found so far has a production-ready Igbo TTS voice, so it stays out of scope.
 
 ## TL;DR: no code changes required
 
@@ -32,25 +34,30 @@ GROQ_API_KEY=
 GOOGLE_CLIENT_EMAIL=
 GOOGLE_PRIVATE_KEY=
 GOOGLE_CLOUD_PROJECT=
-ELEVENLABS_API_KEY=
-ELEVENLABS_VOICE_ID=
+INTRON_API_KEY=
 ```
 
-`HAUSA_MODAL_STT_URL` / `HAUSA_MODAL_TTS_URL` are no longer read anywhere — safe to drop from any
-`.env.local` you have.
+`HAUSA_MODAL_STT_URL` / `HAUSA_MODAL_TTS_URL` / `ELEVENLABS_API_KEY` / `ELEVENLABS_VOICE_ID` are no
+longer read anywhere — safe to drop from any `.env.local` you have.
 
-Hausa TTS now uses a single fixed voice (`ELEVENLABS_VOICE_ID`) regardless of scenario gender —
-the earlier male/female split (`ELEVENLABS_VOICE_ID_MALE`/`_FEMALE`) was dropped after voice
-quality testing. The `gender` param from the scenario is still sent along but no longer affects
-which ElevenLabs voice is used for Hausa (Yoruba's Google TTS path is unaffected — it still picks
+Hausa TTS sends `voice_gender` (`male`/`female`, from the scenario's `gender` field) straight
+through to Intron rather than picking between fixed voice IDs — Intron selects the voice for that
+gender + `voice_language: 'hausa'` itself. Yoruba's Google TTS path is unaffected (still picks
 `ssmlGender` per scenario).
 
-## What to smoke-test once the ElevenLabs key is in place
+**Not live-tested yet**: the exact `voice_accent`/`voice_language` string values Intron expects
+were read from their docs, not confirmed against a real API call (no key was available while
+building this). If Hausa TTS 500s once a real `INTRON_API_KEY` is in place, check the response
+body logged by `[TTS Router] Intron Hausa TTS failed:` in the server console first — that'll have
+Intron's actual error message about which field/value it rejected.
 
-- A Hausa scenario's mic button → transcript comes back (now via Google Chirp `ha-NG`, was Modal).
-- A Hausa scenario's "listen" / AI-speaks button → audio plays (now via ElevenLabs, was Modal VITS).
-- Yoruba should behave exactly as before, just with gender now actually wired into voice selection
-  (`ssmlGender`) instead of being silently ignored.
+## What to smoke-test once the Intron key is in place
+
+- A Hausa scenario's mic button → transcript comes back (via Google Chirp `ha-NG`, unchanged by
+  this swap).
+- A Hausa scenario's "listen" / AI-speaks button → audio plays (now via Intron, was ElevenLabs
+  before that, was Modal VITS originally).
+- Yoruba should behave exactly as before, gender wired into voice selection via `ssmlGender`.
 
 ## Latency note
 
