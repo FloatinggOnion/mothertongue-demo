@@ -41,6 +41,38 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await audioFile.arrayBuffer();
     const audioContent = Buffer.from(arrayBuffer);
 
+    if (language === 'hausa') {
+      const modalUrl = process.env.HAUSA_MODAL_STT_URL;
+      if (!modalUrl) {
+        return NextResponse.json({ error: 'HAUSA_MODAL_STT_URL not configured' }, { status: 500 });
+      }
+
+      console.log('[STT] Dispatched Hausa STT to Modal...');
+      
+      const modalFormData = new FormData();
+      // Clone the file blob into the new FormData
+      modalFormData.append('audio', new Blob([arrayBuffer], { type: audioFile.type }), 'audio.webm');
+      
+      const modalResponse = await fetch(modalUrl, {
+        method: 'POST',
+        body: modalFormData,
+      });
+      
+      if (modalResponse.status === 202) {
+        const data = await modalResponse.json();
+        return NextResponse.json(data, { status: 202 });
+      }
+      
+      if (!modalResponse.ok) {
+        const errorText = await modalResponse.text();
+        console.error('[STT] Modal STT failed:', errorText);
+        return NextResponse.json({ error: `Modal STT failed: ${errorText}` }, { status: modalResponse.status });
+      }
+      
+      const data = await modalResponse.json();
+      return NextResponse.json(data);
+    }
+
     const projectId = process.env.GOOGLE_CLOUD_PROJECT;
     if (!projectId) {
       return NextResponse.json({ error: 'Google Cloud project ID not configured' }, { status: 500 });
@@ -76,5 +108,28 @@ export async function POST(request: NextRequest) {
       { error: 'Failed to transcribe audio', details: errorMsg },
       { status: 500 }
     );
+  }
+}
+
+export async function GET(request: NextRequest) {
+  const callId = request.nextUrl.searchParams.get('callId');
+  if (!callId) {
+    return NextResponse.json({ error: 'Missing callId' }, { status: 400 });
+  }
+
+  const modalUrl = process.env.HAUSA_MODAL_STT_URL;
+  if (!modalUrl) {
+    return NextResponse.json({ error: 'HAUSA_MODAL_STT_URL not configured' }, { status: 500 });
+  }
+
+  try {
+    const response = await fetch(`${modalUrl}/${callId}`);
+    if (!response.ok) {
+      return NextResponse.json({ status: 'failed', error: 'Modal STT poll failed' }, { status: 500 });
+    }
+    const data = await response.json();
+    return NextResponse.json(data);
+  } catch (error) {
+    return NextResponse.json({ status: 'failed', error: String(error) }, { status: 500 });
   }
 }

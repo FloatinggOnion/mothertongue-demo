@@ -27,41 +27,35 @@ export async function POST(request: NextRequest) {
     console.log('[TTS] Request:', { textLength: text.length, gender: voiceGender, language });
 
     // ==========================================
-    // PATH A: HAUSA PIPELINE (ElevenLabs)
+    // PATH A: HAUSA PIPELINE (Modal)
     // ==========================================
     if (language?.toLowerCase() === 'hausa') {
-      const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = process.env.ELEVENLABS_VOICE_ID;
+      const modalUrl = process.env.HAUSA_MODAL_TTS_URL;
 
-      if (!apiKey || !voiceId) {
-        return NextResponse.json({ error: 'ElevenLabs Hausa TTS not configured' }, { status: 500 });
+      if (!modalUrl) {
+        return NextResponse.json({ error: 'HAUSA_MODAL_TTS_URL not configured' }, { status: 500 });
       }
 
-      console.log('[TTS Router] Dispatched Hausa TTS to ElevenLabs...');
+      console.log('[TTS Router] Dispatched Hausa TTS to Modal...');
 
-      const elevenLabsResponse = await fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
-        {
-          method: 'POST',
-          headers: {
-            'xi-api-key': apiKey,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            text,
-            model_id: 'eleven_v3',
-            language_code: 'hau',
-          }),
-        }
-      );
+      const modalResponse = await fetch(modalUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          gender: voiceGender,
+        }),
+      });
 
-      if (!elevenLabsResponse.ok) {
-        const details = await elevenLabsResponse.text();
-        console.error('[TTS Router] ElevenLabs Hausa TTS failed:', elevenLabsResponse.status, details);
+      if (!modalResponse.ok) {
+        const details = await modalResponse.text();
+        console.error('[TTS Router] Modal Hausa TTS failed:', modalResponse.status, details);
         return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
       }
 
-      const audioBuffer = await elevenLabsResponse.arrayBuffer();
+      const audioBuffer = await modalResponse.arrayBuffer();
       return new NextResponse(audioBuffer, {
         headers: {
           'Content-Type': 'audio/mpeg',
