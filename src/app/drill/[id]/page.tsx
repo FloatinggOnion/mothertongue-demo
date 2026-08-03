@@ -339,11 +339,15 @@ export default function DrillPage() {
           scenarioId: scenario.id,
           messages: roleplayHistory(messages).filter((m) => m.id !== 'initial'),
           language: scenario.language,
+          proficiencyLevel, // required by the evaluator rubric
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`Evaluation failed with status ${response.status}`);
+        // Surface the server's message when available (e.g. the "too short" 400)
+        const errorBody = await response.json().catch(() => ({}));
+        const serverMsg = errorBody?.error;
+        throw new Error(serverMsg || `Evaluation failed with status ${response.status}`);
       }
 
       const data = await response.json();
@@ -532,7 +536,7 @@ export default function DrillPage() {
                 <button
                   onClick={fetchSuggestions}
                   disabled={isFetchingSuggestions}
-                  className="group font-ui text-[10px] uppercase tracking-[0.2em] text-accent hover:text-dark transition-colors flex items-center gap-3 disabled:opacity-50"
+                  className="group font-ui text-xs uppercase tracking-widest text-accent hover:text-dark transition-colors flex items-center gap-3 disabled:opacity-50"
                 >
                   <div className="w-1.5 h-1.5 rounded-full bg-accent group-hover:scale-125 transition-transform" />
                   {isFetchingSuggestions ? 'Fetching Guidance...' : 'Stuck? See suggestions'}
@@ -551,7 +555,7 @@ export default function DrillPage() {
               <div className="inline-flex bg-surface border border-divider rounded-sm p-1">
                 <button
                   onClick={() => setUseTextMode(false)}
-                  className={`px-6 py-2 font-ui text-[11px] uppercase tracking-widest rounded-sm transition-all duration-base ${!useTextMode
+                  className={`px-6 py-2 font-ui text-xs uppercase tracking-widest rounded-sm transition-all duration-base ${!useTextMode
                       ? 'bg-accent text-text-inverse shadow-sm'
                       : 'text-text-secondary hover:text-dark'
                     }`}
@@ -560,7 +564,7 @@ export default function DrillPage() {
                 </button>
                 <button
                   onClick={() => setUseTextMode(true)}
-                  className={`px-6 py-2 font-ui text-[11px] uppercase tracking-widest rounded-sm transition-all duration-base ${useTextMode
+                  className={`px-6 py-2 font-ui text-xs uppercase tracking-widest rounded-sm transition-all duration-base ${useTextMode
                       ? 'bg-accent text-text-inverse shadow-sm'
                       : 'text-text-secondary hover:text-dark'
                     }`}
@@ -578,7 +582,7 @@ export default function DrillPage() {
                 onClick={() => setAsideMode((prev) => !prev)}
                 disabled={isLoading || drillEnded}
                 aria-pressed={asideMode}
-                className={`px-4 py-1.5 font-ui text-[10px] uppercase tracking-[0.2em] rounded-sm border border-dashed transition-colors duration-fast disabled:opacity-30 ${
+                className={`px-4 py-1.5 font-ui text-xs uppercase tracking-widest rounded-sm border border-dashed transition-colors duration-fast disabled:opacity-30 ${
                   asideMode
                     ? 'border-accent text-accent'
                     : 'border-[var(--color-text-secondary)]/50 text-text-secondary hover:text-dark'
@@ -602,7 +606,7 @@ export default function DrillPage() {
                 <button
                   type="submit"
                   disabled={!textInput.trim() || isLoading || drillEnded}
-                  className="px-8 bg-dark text-text-inverse font-ui text-label uppercase tracking-widest hover:bg-accent transition-colors duration-fast disabled:opacity-30"
+                  className="px-8 bg-accent text-text-inverse font-ui text-caption uppercase tracking-widest hover:bg-[#A84E22] transition-colors duration-fast disabled:opacity-30"
                 >
                   {isLoading ? '...' : 'Send'}
                 </button>

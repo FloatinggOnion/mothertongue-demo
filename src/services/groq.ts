@@ -440,30 +440,83 @@ export async function getReplySuggestions(
 
 /**
  * Evaluates the conversation based on the user's proficiency level and scenario.
+ *
+ * Key improvements over the old version:
+ *  - `proficiencyLevel` is threaded in so the rubric is level-matched.
+ *  - Per-level anchors (80-100 / 50-79 / 1-49) give the model a concrete bar.
+ *  - Reasoning fields force the model to justify each score before committing.
+ *  - STT context tells the model not to penalise transcription noise as grammar.
+ *  - `temperature: 0` removes run-to-run variance for a deterministic task.
+ *  - `overallScore` is derived in code (average of three sub-scores / 30) so it
+ *    can never contradict the sub-scores.
  */
 export async function evaluateConversation(
   scenario: any,
   conversationHistory: Message[],
-  language?: string
+  language?: string,
+  proficiencyLevel: ProficiencyLevel = 'beginner'
 ): Promise<Evaluation> {
   const activeLang = language || scenario?.language || 'yoruba';
   const langDisplay = activeLang.toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
 
+  const levelRubric: Record<ProficiencyLevel, string> = {
+    beginner: `
+      This user is a BEGINNER. Judge them against beginner expectations, not native fluency:
+      - 80-100: Short, simple, mostly correct phrases; basic vocabulary used appropriately; some
+        code-switching to English is expected and NOT a penalty.
+      - 50-79: Gets basic meaning across but with frequent grammar slips or heavy reliance on
+        English; hesitant but making an honest attempt in ${langDisplay}.
+      - 1-49: Little to no usable ${langDisplay}, mostly English, or responses that don't engage
+        with the scenario at all.
+    `,
+    intermediate: `
+      This user is INTERMEDIATE. Judge them against a learner building real conversational range:
+      - 80-100: Full sentences, appropriate everyday vocabulary, generally correct grammar, only
+        occasional English fallback.
+      - 50-79: Communicates adequately but grammar is inconsistent, vocabulary is limited/repetitive,
+        or sentences are simpler than expected at this level.
+      - 1-49: Responses are closer to beginner level than intermediate — heavy English reliance or
+        frequent breakdowns in basic sentence structure.
+    `,
+    advanced: `
+      This user is ADVANCED. Judge them against near-native conversational fluency:
+      - 80-100: Complex sentences, idiomatic and culturally appropriate language, grammar errors
+        are rare and minor, natural pacing and register.
+      - 50-79: Solid fluency but noticeable non-native patterns — grammar slips, overly literal
+        phrasing, or vocabulary that's correct but not idiomatic.
+      - 1-49: Simpler or more error-prone than expected for an advanced learner.
+    `,
+  };
+
   const systemPrompt = `
-    You are an expert ${langDisplay} language evaluator.
-    Review the following conversation between a user learning ${langDisplay} and an AI.
-    Provide a constructive evaluation of the user's performance.
+    You are an expert ${langDisplay} language evaluator scoring a learner at the
+    "${proficiencyLevel}" level. Only evaluate the "user" turns — the "assistant" turns are the AI
+    conversation partner and are not part of the user's performance.
+
+    IMPORTANT: The user's turns are transcribed from spoken audio via speech-to-text. Do not
+    penalize likely transcription artifacts (odd spelling, a dropped tone mark, a word that's
+    phonetically close to the right one) as if they were grammar mistakes — judge the apparent
+    intent, not transcription noise.
+
+    RUBRIC FOR THIS USER'S LEVEL:
+    ${levelRubric[proficiencyLevel]}
+
+    For each of fluencyScore, grammarScore, and confidenceScore: first write one short sentence of
+    reasoning grounded in a specific moment from the conversation, THEN commit to a 1-100 number
+    consistent with that reasoning and the rubric above. Do not pick the number first.
 
     OUTPUT FORMAT REQUIREMENTS:
-    Return exactly one JSON object with the following schema:
+    Return exactly one JSON object with this schema:
     {
-      "strength": "string (One thing they did well)",
-      "strengthExample": "string (A quote from the user demonstrating this strength)",
-      "improvement": "string (One area to improve)",
-      "correctedSentence": "string (A corrected version of one of their sentences)",
-      "overallScore": number (1-10),
+      "strength": "string (one thing they did well)",
+      "strengthExample": "string (a quote from the user demonstrating this strength)",
+      "improvement": "string (one area to improve, specific to this conversation)",
+      "correctedSentence": "string (a corrected version of one of their actual sentences)",
+      "fluencyReasoning": "string (one sentence, grounded in the transcript)",
       "fluencyScore": number (1-100),
+      "grammarReasoning": "string (one sentence, grounded in the transcript)",
       "grammarScore": number (1-100),
+      "confidenceReasoning": "string (one sentence, grounded in the transcript)",
       "confidenceScore": number (1-100)
     }
   `.trim();
@@ -475,8 +528,24 @@ export async function evaluateConversation(
   ];
 
   try {
-    const rawText = await callGroq(messages, { json: true, temperature: 0.3 });
-    return JSON.parse(rawText || '{}');
+    const rawText = await callGroq(messages, { json: true, temperature: 0 });
+    const parsed = JSON.parse(rawText || '{}');
+
+    const fluencyScore = Number(parsed.fluencyScore) || 0;
+    const grammarScore = Number(parsed.grammarScore) || 0;
+    const confidenceScore = Number(parsed.confidenceScore) || 0;
+
+    return {
+      strength: parsed.strength || '',
+      strengthExample: parsed.strengthExample,
+      improvement: parsed.improvement || '',
+      correctedSentence: parsed.correctedSentence || '',
+      fluencyScore,
+      grammarScore,
+      confidenceScore,
+      // Derived in code, not model-guessed — keeps it mathematically consistent with the sub-scores.
+      overallScore: Math.round((fluencyScore + grammarScore + confidenceScore) / 30),
+    };
   } catch (error) {
     console.error('Error evaluating conversation:', error);
     throw error;

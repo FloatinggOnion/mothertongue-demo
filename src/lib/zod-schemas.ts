@@ -27,6 +27,7 @@ export const EvaluateSchema = z.object({
   scenarioId: z.string().min(1, 'scenarioId is required'),
   messages: z.array(MessageSchema).min(1, 'messages array must not be empty'),
   language: z.string().optional(), // 🌟 Added to support cross-language evaluation
+  proficiencyLevel: ProficiencyLevelSchema, // required — no silent default so the rubric is always level-matched
 });
 
 export const SuggestionsSchema = z.object({
