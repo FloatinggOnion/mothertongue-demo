@@ -42,13 +42,16 @@ longer read anywhere — safe to drop from any `.env.local` you have.
 
 Hausa TTS sends `voice_gender` (`male`/`female`, from the scenario's `gender` field) straight
 through to Intron rather than picking between fixed voice IDs — Intron selects the voice for that
-gender + `voice_language: 'hausa'` itself. Yoruba's Google TTS path is unaffected (still picks
+gender + `voice_language: 'ha'` itself. Yoruba's Google TTS path is unaffected (still picks
 `ssmlGender` per scenario).
 
-**Not live-tested yet**: the exact `voice_accent`/`voice_language` string values Intron expects
-were read from their docs, not confirmed against a real API call (no key was available while
-building this). If Hausa TTS 500s once a real `INTRON_API_KEY` is in place, check the response
-body logged by `[TTS Router] Intron Hausa TTS failed:` in the server console first — that'll have
+**Not live-tested yet**: `voice_language: 'ha'` is confirmed from a verbatim example in Intron's
+docs (their tts-queue page's Hausa section). `voice_accent: 'hausa'` is still a best guess — that
+same example oddly showed `voice_accent: "swahili"` under the Hausa heading, which looks like a
+copy-paste artifact in their docs rather than real guidance, so I didn't copy it. No API key was
+available to confirm the correct accent value directly. If Hausa TTS 500s once a real
+`INTRON_API_KEY` is in place, check the response body logged by
+`[TTS Router] Intron Hausa TTS failed:` in the server console first — that'll have
 Intron's actual error message about which field/value it rejected.
 
 ## What to smoke-test once the Intron key is in place

@@ -89,7 +89,7 @@ describe('POST /api/tts', () => {
     const callBody = JSON.parse((global.fetch as any).mock.calls[0][1].body);
     expect(callBody).toEqual({
       text: 'Sannu',
-      voice_language: 'hausa',
+      voice_language: 'ha',
       voice_accent: 'hausa',
       voice_gender: 'female',
       output_audio_format: 'wav',

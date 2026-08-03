@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
         },
         body: JSON.stringify({
           text,
-          voice_language: 'hausa',
+          voice_language: 'ha',
           voice_accent: 'hausa',
           voice_gender: voiceGender,
           output_audio_format: 'wav',

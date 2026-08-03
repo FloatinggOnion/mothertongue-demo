@@ -37,7 +37,7 @@ All server-side transcription runs through **Google Cloud Speech-to-Text v2 (Chi
 ### B. Speech Synthesis (TTS)
 TTS is routed by language, since no single vendor covers both well:
 *   **Yorùbá**: **Google Cloud Text-to-Speech** (`yo-NG`), with `ssmlGender` wired to each scenario's `gender` field for male/female voice selection.
-*   **Hausa**: **Intron** (`voice_language: 'hausa'`) — a dedicated local-language Hausa TTS model, rather than a generic multilingual model with Hausa bolted on.
+*   **Hausa**: **Intron** (`voice_language: 'ha'`) — a dedicated local-language Hausa TTS model, rather than a generic multilingual model with Hausa bolted on.
 *   **Igbo**: not yet supported — no vendor evaluated so far offers a production-ready Igbo TTS voice. See `.planning/` for status.
 
 ---
