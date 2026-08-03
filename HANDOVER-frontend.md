@@ -33,16 +33,17 @@ GOOGLE_CLIENT_EMAIL=
 GOOGLE_PRIVATE_KEY=
 GOOGLE_CLOUD_PROJECT=
 ELEVENLABS_API_KEY=
-ELEVENLABS_VOICE_ID_MALE=
-ELEVENLABS_VOICE_ID_FEMALE=
+ELEVENLABS_VOICE_ID=
 ```
 
 `HAUSA_MODAL_STT_URL` / `HAUSA_MODAL_TTS_URL` are no longer read anywhere — safe to drop from any
 `.env.local` you have.
 
-**You'll need to pick the two ElevenLabs voice IDs yourself** — log into the ElevenLabs voice
-library, pick a male and a female voice, and drop their IDs into
-`ELEVENLABS_VOICE_ID_MALE`/`_FEMALE`. There isn't a way to script that part.
+Hausa TTS now uses a single fixed voice (`ELEVENLABS_VOICE_ID`) regardless of scenario gender —
+the earlier male/female split (`ELEVENLABS_VOICE_ID_MALE`/`_FEMALE`) was dropped after voice
+quality testing. The `gender` param from the scenario is still sent along but no longer affects
+which ElevenLabs voice is used for Hausa (Yoruba's Google TTS path is unaffected — it still picks
+`ssmlGender` per scenario).
 
 ## What to smoke-test once the ElevenLabs key is in place
 

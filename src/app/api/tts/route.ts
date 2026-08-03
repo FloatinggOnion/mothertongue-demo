@@ -31,9 +31,7 @@ export async function POST(request: NextRequest) {
     // ==========================================
     if (language?.toLowerCase() === 'hausa') {
       const apiKey = process.env.ELEVENLABS_API_KEY;
-      const voiceId = voiceGender === 'female'
-        ? process.env.ELEVENLABS_VOICE_ID_FEMALE
-        : process.env.ELEVENLABS_VOICE_ID_MALE;
+      const voiceId = process.env.ELEVENLABS_VOICE_ID;
 
       if (!apiKey || !voiceId) {
         return NextResponse.json({ error: 'ElevenLabs Hausa TTS not configured' }, { status: 500 });

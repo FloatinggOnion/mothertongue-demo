@@ -22,8 +22,7 @@ describe('POST /api/tts', () => {
     synthesizeSpeechMock.mockReset();
     global.fetch = vi.fn() as any;
     process.env.ELEVENLABS_API_KEY = 'test-key';
-    process.env.ELEVENLABS_VOICE_ID_MALE = 'voice-male';
-    process.env.ELEVENLABS_VOICE_ID_FEMALE = 'voice-female';
+    process.env.ELEVENLABS_VOICE_ID = 'voice-fixed';
   });
 
   afterEach(() => {
@@ -62,7 +61,7 @@ describe('POST /api/tts', () => {
     );
   });
 
-  it('synthesizes Hausa speech via ElevenLabs using the gender-selected voice id', async () => {
+  it('synthesizes Hausa speech via ElevenLabs using the configured voice id', async () => {
     (global.fetch as any).mockResolvedValueOnce({
       ok: true,
       arrayBuffer: async () => new ArrayBuffer(8),
@@ -73,7 +72,7 @@ describe('POST /api/tts', () => {
 
     expect(response.status).toBe(200);
     expect(global.fetch).toHaveBeenCalledWith(
-      'https://api.elevenlabs.io/v1/text-to-speech/voice-female',
+      'https://api.elevenlabs.io/v1/text-to-speech/voice-fixed',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({ 'xi-api-key': 'test-key' }),
@@ -85,6 +84,22 @@ describe('POST /api/tts', () => {
       model_id: 'eleven_v3',
       language_code: 'hau',
     });
+  });
+
+  it('uses the same voice id for Hausa regardless of gender', async () => {
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      arrayBuffer: async () => new ArrayBuffer(8),
+    });
+
+    await POST(makeRequest({ text: 'Sannu', gender: 'male', language: 'hausa' }));
+    await POST(makeRequest({ text: 'Sannu', gender: 'female', language: 'hausa' }));
+
+    const urls = (global.fetch as any).mock.calls.map((call: unknown[]) => call[0]);
+    expect(urls).toEqual([
+      'https://api.elevenlabs.io/v1/text-to-speech/voice-fixed',
+      'https://api.elevenlabs.io/v1/text-to-speech/voice-fixed',
+    ]);
   });
 
   it('returns 500 when ElevenLabs is not configured', async () => {
