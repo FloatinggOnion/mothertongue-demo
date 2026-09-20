@@ -1,14 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { TextToSpeechClient } from '@google-cloud/text-to-speech';
 import { TtsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 
-// Initialize Google Cloud TTS client (used for Yoruba)
-const googleClient = new TextToSpeechClient({
-  credentials: {
-    client_email: process.env.GOOGLE_CLIENT_EMAIL,
-    private_key: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-  },
-});
+const INTRON_TTS: Record<string, { voice_language: string; voice_accent: string }> = {
+  hausa:  { voice_language: 'ha', voice_accent: 'hausa' },
+  igbo:   { voice_language: 'ig', voice_accent: 'igbo' },
+  yoruba: { voice_language: 'yo', voice_accent: 'yoruba' },
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,91 +20,62 @@ export async function POST(request: NextRequest) {
     }
 
     const { text, gender, language } = validationResult.data;
-    const voiceGender = gender ?? 'male';
-    console.log('[TTS] Request:', { textLength: text.length, gender: voiceGender, language });
+    const voiceGender = gender ?? 'female';
+    const lang = (language || 'yoruba').toLowerCase();
+    const config = INTRON_TTS[lang];
 
-// ==========================================
-// PATH A: HAUSA PIPELINE (Modal)
-// ==========================================
-if (language?.toLowerCase() === 'hausa') {
-  const modalUrl = process.env.HAUSA_MODAL_TTS_URL;
-
-  if (!modalUrl) {
-    return NextResponse.json({ error: 'Hausa TTS URL not configured' }, { status: 500 });
-  }
-
-  console.log('[TTS Router] Dispatched Hausa TTS to Modal...');
-
-  const modalResponse = await fetch(modalUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ text }),
-  });
-
-  if (!modalResponse.ok) {
-    console.error('[TTS Router] Hausa TTS failed:', modalResponse.statusText);
-    return NextResponse.json({ error: 'Failed to generate Hausa speech' }, { status: 500 });
-  }
-
-  const audioBuffer = await modalResponse.arrayBuffer();
-  return new NextResponse(audioBuffer, {
-    headers: {
-      'Content-Type': 'audio/wav',
-    },
-  });
-}
-    // ==========================================
-    // PATH B: YORUBA PIPELINE (Google Cloud TTS)
-    // ==========================================
-    const [response] = await googleClient.synthesizeSpeech({
-      input: { text },
-      voice: {
-        languageCode: 'yo-NG',
-        ssmlGender: voiceGender === 'female' ? 'FEMALE' : 'MALE',
-      },
-      audioConfig: {
-        audioEncoding: 'MP3',
-        speakingRate: 1.0,
-        pitch: 0.0,
-      },
-    });
-
-    const audioContent = response.audioContent;
-
-    if (!audioContent) {
-      console.error('[TTS] Google TTS returned empty audio content');
-      return NextResponse.json(
-        { error: 'Failed to generate speech content' },
-        { status: 500 }
-      );
+    if (!config) {
+      return NextResponse.json({ error: `Unsupported language: ${lang}` }, { status: 400 });
     }
 
-    console.log('[TTS] Success, audioContent type:', typeof audioContent, 'length:', audioContent.length);
+    const apiKey = process.env.INTRON_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json({ error: 'Intron API key not configured' }, { status: 500 });
+    }
 
-    const audioBytes = typeof audioContent === 'string'
-      ? Buffer.from(audioContent, 'base64')
-      : audioContent;
+    console.log(`[TTS] ${lang} → Intron (${config.voice_language})`);
 
-    return new Response(audioBytes as unknown as BodyInit, {
+    const generateResponse = await fetch('https://infer.voice.intron.io/tts/v1/generate', {
+      method: 'POST',
       headers: {
-        'Content-Type': 'audio/mpeg',
-        'Content-Length': audioContent.length.toString(),
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
       },
+      body: JSON.stringify({
+        text,
+        ...config,
+        voice_gender: voiceGender,
+        output_audio_format: 'wav',
+      }),
+    });
+
+    if (!generateResponse.ok) {
+      const details = await generateResponse.text();
+      console.error(`[TTS] Intron ${lang} failed:`, generateResponse.status, details);
+      return NextResponse.json({ error: `Failed to generate ${lang} speech` }, { status: 500 });
+    }
+
+    const generateData = await generateResponse.json();
+    const audioPath = generateData?.data?.audio_path;
+
+    if (!audioPath) {
+      console.error('[TTS] Intron response missing audio_path:', generateData);
+      return NextResponse.json({ error: 'Failed to generate speech' }, { status: 500 });
+    }
+
+    const audioResponse = await fetch(audioPath);
+    if (!audioResponse.ok) {
+      console.error('[TTS] Failed to fetch Intron audio_path:', audioResponse.status);
+      return NextResponse.json({ error: 'Failed to fetch generated speech' }, { status: 500 });
+    }
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    return new NextResponse(audioBuffer, {
+      headers: { 'Content-Type': 'audio/wav' },
     });
   } catch (error: unknown) {
     const msg = error instanceof Error ? error.message : String(error);
     console.error('[TTS] API error:', msg);
-
-    if (typeof error === 'object' && error !== null && 'message' in error && typeof (error as { message: unknown }).message === 'string' && (error as { message: string }).message.includes('credentials')) {
-      return NextResponse.json(
-        { error: 'Google Cloud credentials not configured or invalid' },
-        { status: 500 }
-      );
-    }
-
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

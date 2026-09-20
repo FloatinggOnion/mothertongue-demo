@@ -8,8 +8,11 @@ import { ProficiencyLevel } from '@/types';
  */
 
 /** Resolves a display-cased language name from a free-form language string. */
-export function langDisplayName(language?: string): 'Hausa' | 'Yoruba' {
-  return (language || '').toLowerCase() === 'hausa' ? 'Hausa' : 'Yoruba';
+export function langDisplayName(language?: string): 'Hausa' | 'Yoruba' | 'Igbo' {
+  const l = (language || '').toLowerCase();
+  if (l === 'hausa') return 'Hausa';
+  if (l === 'igbo') return 'Igbo';
+  return 'Yoruba';
 }
 
 /**
@@ -227,7 +230,7 @@ export function buildReplySuggestionsSystemPrompt(
 }
 
 /** Per-level scoring anchors for buildEvaluationSystemPrompt. */
-function evaluationLevelRubric(langDisplay: 'Hausa' | 'Yoruba', proficiencyLevel: ProficiencyLevel): string {
+function evaluationLevelRubric(langDisplay: 'Hausa' | 'Yoruba' | 'Igbo', proficiencyLevel: ProficiencyLevel): string {
   const rubrics: Record<ProficiencyLevel, string> = {
     beginner: `
       This user is a BEGINNER. Judge them against beginner expectations, not native fluency:

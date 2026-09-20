@@ -68,20 +68,22 @@ export function MessageBubble({
 interface ConversationViewProps {
   messages: Message[];
   isLoading?: boolean;
+  isWarmingUp?: boolean;
   isListening?: boolean;
   isSpeaking?: boolean;
-  scenario?: { 
-    context: string; 
-    aiRole: string; 
-    aiRoleYoruba: string; 
+  scenario?: {
+    context: string;
+    aiRole: string;
+    aiRoleYoruba: string;
     icon: string;
-    language: 'yoruba' | 'hausa';
+    language: 'yoruba' | 'hausa' | 'igbo';
   };
 }
 
 export function ConversationView({
   messages,
   isLoading = false,
+  isWarmingUp = false,
   isListening = false,
   isSpeaking = false,
   scenario,
@@ -134,21 +136,26 @@ export function ConversationView({
         </div>
       )}
 
-      {/* Loading dots */}
+      {/* Loading indicator — upgrades to warm-up message after 5 s */}
       {isLoading && (
         <div className="flex justify-start mb-4">
           <div className="bg-[var(--color-surface)] text-[var(--color-text)] border border-[var(--color-divider)] rounded-2xl rounded-bl-sm px-4 py-3">
-            <div className="flex space-x-2">
-              <div className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" />
-              <div
-                className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce"
-                style={{ animationDelay: '0.1s' }}
-              />
-              <div
-                className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce"
-                style={{ animationDelay: '0.2s' }}
-              />
-            </div>
+            {isWarmingUp ? (
+              <div className="animate-pulse">
+                <p className="font-ui text-[10px] uppercase tracking-widest text-[var(--color-text-secondary)] mb-1">
+                  Warming up model
+                </p>
+                <p className="font-ui text-xs text-[var(--color-text-secondary)]">
+                  First response takes ~20 s — hang tight
+                </p>
+              </div>
+            ) : (
+              <div className="flex space-x-2">
+                <div className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" />
+                <div className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" style={{ animationDelay: '0.1s' }} />
+                <div className="w-2 h-2 bg-[var(--color-accent)] rounded-full animate-bounce" style={{ animationDelay: '0.2s' }} />
+              </div>
+            )}
           </div>
         </div>
       )}

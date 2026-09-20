@@ -67,7 +67,8 @@ export function useSpeechRecognition(options?: UseSpeechRecognitionOptions): Use
           const formData = new FormData();
           formData.append('audio', blob);
 
-          const languageCode = optionsRef.current?.lang?.startsWith('ha') ? 'hausa' : 'yoruba';
+          const l = optionsRef.current?.lang || '';
+          const languageCode = l.startsWith('ha') ? 'hausa' : l.startsWith('ig') ? 'igbo' : 'yoruba';
           formData.append('language', languageCode);
 
           const response = await fetch('/api/transcribe', {
@@ -258,7 +259,8 @@ export function useSpeechSynthesis(options?: UseSpeechSynthesisOptions): UseSpee
     abortControllerRef.current = abortController;
 
     try {
-      const languagePayload = options?.lang?.startsWith('ha') ? 'hausa' : 'yoruba';
+      const l = options?.lang || '';
+      const languagePayload = l.startsWith('ha') ? 'hausa' : l.startsWith('ig') ? 'igbo' : 'yoruba';
       const response = await fetch('/api/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

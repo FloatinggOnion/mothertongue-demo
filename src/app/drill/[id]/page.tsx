@@ -33,8 +33,11 @@ export default function DrillPage() {
   const scenarioId = params.id as string;
   const scenario = getScenarioById(scenarioId);
 
-  // Normalize active language selection
-  const isHausa = scenario?.language === 'hausa';
+  function langBcp47(language?: string) {
+    if (language === 'hausa') return 'ha-NG';
+    if (language === 'igbo') return 'ig-NG';
+    return 'yo-NG';
+  }
 
   // State
   const [messages, setMessages] = useState<Message[]>([]);
@@ -69,6 +72,7 @@ export default function DrillPage() {
   const [useTextMode, setUseTextMode] = useState(false);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
   const [asideMode, setAsideMode] = useState(false);
+  const [warmingUp, setWarmingUp] = useState(false);
 
   // Refs
   const conversationRef = useRef<HTMLDivElement>(null);
@@ -79,9 +83,15 @@ export default function DrillPage() {
     asideModeRef.current = asideMode;
   }, [asideMode]);
 
-  // Speech synthesis hook declared first so variable references are bound inside memory grid
+  // Upgrade loading indicator to warm-up message if response takes >5 s
+  useEffect(() => {
+    if (!isLoading) { setWarmingUp(false); return; }
+    const t = setTimeout(() => setWarmingUp(true), 5000);
+    return () => clearTimeout(t);
+  }, [isLoading]);
+
   const { speak, stop, isSpeaking, usingFallback } = useSpeechSynthesis({
-    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG'
+    lang: langBcp47(scenario?.language),
   });
 
   // Send message to AI (Refactored to Functional Updates to capture current message arrays accurately)
@@ -201,7 +211,7 @@ export default function DrillPage() {
     isSupported: sttSupported,
     error: sttError,
   } = useSpeechRecognition({
-    lang: scenario?.language === 'hausa' ? 'ha-NG' : 'yo-NG',
+    lang: langBcp47(scenario?.language),
     onTranscriptionComplete: (finalizedText) => {
       if (finalizedText.trim()) {
         sendMessage(finalizedText.trim(), { forceAside: asideModeRef.current });
@@ -477,6 +487,7 @@ export default function DrillPage() {
             <ConversationView
               messages={messages}
               isLoading={isLoading}
+              isWarmingUp={warmingUp}
               isListening={isListening}
               isSpeaking={isSpeaking}
               scenario={scenario}
@@ -599,7 +610,7 @@ export default function DrillPage() {
                   type="text"
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
-                  placeholder={isHausa ? "Respond in Hausa or English..." : "Respond in Yoruba or English..."}
+                  placeholder={`Respond in ${scenario.language.charAt(0).toUpperCase() + scenario.language.slice(1)} or English...`}
                   disabled={isLoading || drillEnded}
                   className="flex-1 bg-white border border-divider rounded-sm px-6 py-4 font-body text-text placeholder-text-secondary/50 focus:outline-none focus:border-accent transition-colors disabled:opacity-50"
                 />
