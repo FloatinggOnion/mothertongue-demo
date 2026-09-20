@@ -56,10 +56,10 @@ export async function POST(request: NextRequest) {
     }
 
     const generateData = await generateResponse.json();
-    const audioPath = generateData?.data?.audio_path;
+    const audioPath: unknown = generateData?.data?.audio_path;
 
-    if (!audioPath) {
-      console.error('[TTS] Intron response missing audio_path:', generateData);
+    if (typeof audioPath !== 'string' || !audioPath.startsWith('https://')) {
+      console.error('[TTS] Intron response missing or invalid audio_path:', generateData);
       return NextResponse.json({ error: 'Failed to generate speech' }, { status: 500 });
     }
 
