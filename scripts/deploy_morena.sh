@@ -17,6 +17,7 @@ fi
 # Read only the two morena-specific token vars from .env.local
 TOKEN_ID=$(grep -E '^MODAL_TOKEN_ID_MORENA=' "$ENV_FILE" | cut -d= -f2-)
 TOKEN_SECRET=$(grep -E '^MODAL_TOKEN_SECRET_MORENA=' "$ENV_FILE" | cut -d= -f2-)
+ENDPOINT_SECRET=$(grep -E '^MORENA_ENDPOINT_SECRET=' "$ENV_FILE" | cut -d= -f2-)
 
 if [[ -z "$TOKEN_ID" || -z "$TOKEN_SECRET" ]]; then
   echo "Error: MODAL_TOKEN_ID_MORENA and MODAL_TOKEN_SECRET_MORENA must be set in .env.local" >&2
@@ -24,5 +25,5 @@ if [[ -z "$TOKEN_ID" || -z "$TOKEN_SECRET" ]]; then
 fi
 
 echo "Deploying modal_morena.py with mothertongue account..."
-MODAL_TOKEN_ID="$TOKEN_ID" MODAL_TOKEN_SECRET="$TOKEN_SECRET" \
+MODAL_TOKEN_ID="$TOKEN_ID" MODAL_TOKEN_SECRET="$TOKEN_SECRET" MORENA_ENDPOINT_SECRET="$ENDPOINT_SECRET" \
   modal deploy "$(dirname "$0")/../modal_morena.py"

@@ -17,8 +17,6 @@ Modal reads the secret from .env.local at deploy time via Secret.from_dotenv().
 """
 
 import modal
-from fastapi import Header, HTTPException
-from typing import Optional
 
 MODEL_ID = "vamboai/morena-1.5b-instruct"
 MODEL_DIR = "/model"
@@ -44,7 +42,7 @@ image = (
     image=image,
     gpu="T4",
     scaledown_window=120,  # stay warm for 2 min after last request; no idle billing beyond that
-    secrets=[modal.Secret.from_dotenv(".env.local")],
+    secrets=[modal.Secret.from_dict({"MORENA_ENDPOINT_SECRET": __import__("os").environ.get("MORENA_ENDPOINT_SECRET", "")})],
 )
 class MorenaModel:
     @modal.enter()
@@ -63,15 +61,12 @@ class MorenaModel:
         self._secret = os.environ.get("MORENA_ENDPOINT_SECRET")
 
     @modal.fastapi_endpoint(method="POST")
-    def infer(
-        self,
-        data: dict,
-        x_api_key: Optional[str] = Header(None),
-    ) -> dict:
+    def infer(self, data: dict) -> dict:
+        from fastapi import HTTPException
         import torch
 
-        # Auth — skip only when secret is not configured (local dev without .env.local)
-        if self._secret and x_api_key != self._secret:
+        # Auth — pop key from body so it never reaches inference logic
+        if self._secret and data.pop("x_api_key", None) != self._secret:
             raise HTTPException(status_code=401, detail="Unauthorized")
 
         system_prompt = str(data.get("system_prompt", ""))

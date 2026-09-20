@@ -15,13 +15,15 @@ async function callModal(
 
   const res = await fetch(MODAL_URL, {
     method: 'POST',
-    body: JSON.stringify({ system_prompt: systemPrompt, messages, max_new_tokens: maxNewTokens }),
-    headers: {
-      'Content-Type': 'application/json',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_prompt: systemPrompt,
+      messages,
+      max_new_tokens: maxNewTokens,
       ...(process.env.MORENA_ENDPOINT_SECRET
-        ? { 'X-Api-Key': process.env.MORENA_ENDPOINT_SECRET }
+        ? { x_api_key: process.env.MORENA_ENDPOINT_SECRET }
         : {}),
-    },
+    }),
   });
 
   if (!res.ok) throw new Error(`Modal endpoint returned ${res.status}`);
