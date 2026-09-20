@@ -23,11 +23,19 @@ const content = {
     body: "Ƙwarewa ana gina ta darasi bayan darasi, ƙwaƙwalwa bayan ƙwaƙwalwa. Practice Hausa with an AI partner who understands northern Nigerian culture.",
     ctaText: "Practice Hausa",
     ctaLink: "/scenarios?lang=hausa"
+  },
+  igbo: {
+    proverb: `"Onye wetara oji wetara ndụ."`,
+    proverbTranslation: "He who brings kola brings life.",
+    heading: "Asụsụ gị bụ ọchịchọ gị.",
+    body: "Fluency grows turn by turn, word by word. Practice Igbo with an AI partner rooted in the culture and rhythm of south-eastern Nigeria.",
+    ctaText: "Practice Igbo",
+    ctaLink: "/scenarios?lang=igbo"
   }
 };
 
 export default function Home() {
-  const [selectedLang, setSelectedLang] = useState<'yoruba' | 'hausa'>('yoruba');
+  const [selectedLang, setSelectedLang] = useState<'yoruba' | 'hausa' | 'igbo'>('yoruba');
 
   return (
     <main className="relative min-h-screen selection:bg-accent/30">
@@ -116,14 +124,18 @@ export default function Home() {
                     </button>
 
                     {/* 03 Igbo */}
-                    <div className="flex flex-col gap-1 text-text-secondary opacity-40 cursor-not-allowed select-none" title="Coming Soon">
+                    <button
+                      onClick={() => setSelectedLang('igbo')}
+                      className={`flex flex-col gap-1 text-left text-accent hover:opacity-70 transition-opacity w-full ${
+                        selectedLang === 'igbo' ? 'opacity-100' : 'opacity-40'
+                      }`}
+                    >
                       <div className="flex items-baseline gap-4">
-                        <span className="font-display text-2xl opacity-30 select-none">03</span>
+                        <span className="font-display text-2xl opacity-40 select-none">03</span>
                         <span className="font-display text-3xl">Igbo</span>
                       </div>
                       <span className="font-ui text-[10px] uppercase tracking-widest opacity-70 ml-10">South-East Nigeria</span>
-                      <span className="font-ui text-[9px] uppercase tracking-widest text-accent opacity-60 ml-10">Coming Soon</span>
-                    </div>
+                    </button>
                   </div>
                 </aside>
               </div>

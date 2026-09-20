@@ -1,6 +1,7 @@
 import { Scenario } from '@/types';
+import { igboScenarios } from './igbo-scenarios';
 
-export const scenarios: Scenario[] = [
+export const scenarios: Scenario[] = [...igboScenarios,
   {
     id: 'market-haggling',
     language: 'yoruba',

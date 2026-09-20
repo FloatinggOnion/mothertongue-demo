@@ -4,7 +4,7 @@ export type ProficiencyLevel = 'beginner' | 'intermediate' | 'advanced';
 
 export interface Scenario {
   id: string;
-  language: 'yoruba' | 'hausa'; // 🌟 Added to support cross-language scenarios
+  language: 'yoruba' | 'hausa' | 'igbo';
   title: string;
   titleYoruba: string;
   description: string;
