@@ -58,12 +58,14 @@ export async function POST(request: NextRequest) {
     const generateData = await generateResponse.json();
     const audioPath: unknown = generateData?.data?.audio_path;
 
-    if (typeof audioPath !== 'string' || !audioPath.startsWith('https://')) {
+    if (typeof audioPath !== 'string' || !audioPath.startsWith('http')) {
       console.error('[TTS] Intron response missing or invalid audio_path:', generateData);
       return NextResponse.json({ error: 'Failed to generate speech' }, { status: 500 });
     }
 
-    const audioResponse = await fetch(audioPath);
+    // Intron returns http:// S3 URLs — upgrade to https before fetching
+    const securePath = audioPath.replace(/^http:\/\//, 'https://');
+    const audioResponse = await fetch(securePath);
     if (!audioResponse.ok) {
       console.error('[TTS] Failed to fetch Intron audio_path:', audioResponse.status);
       return NextResponse.json({ error: 'Failed to fetch generated speech' }, { status: 500 });
