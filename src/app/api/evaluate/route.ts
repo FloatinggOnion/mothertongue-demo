@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { evaluateConversation } from '@/services/groq';
+import { evaluateConversation } from '@/services/llm';
 import { getScenarioById } from '@/config/scenarios';
 import { EvaluateSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 import { logError } from '@/lib/logger';

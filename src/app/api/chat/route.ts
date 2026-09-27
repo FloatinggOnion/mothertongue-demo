@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getPartnerResponse, classifyUserTurn, getAsideAnswer } from '@/services/groq';
+import { getPartnerResponse, classifyUserTurn, getAsideAnswer } from '@/services/llm';
 import { getScenarioById } from '@/config/scenarios';
 import { ChatSchema, getZodErrorMessage } from '@/lib/zod-schemas';
 import { roleplayHistory } from '@/lib/conversation';
