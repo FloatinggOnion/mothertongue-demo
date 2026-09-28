@@ -25,7 +25,7 @@ describe('LLM_PROVIDER=hybrid', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it.each([
-    ['yoruba', 'morena'],
+    ['yoruba', 'gemini'],
     ['hausa', 'aya'],
     ['igbo', 'aya'],
     ['swahili', 'gemini'],
@@ -38,6 +38,7 @@ describe('LLM_PROVIDER=hybrid', () => {
   it('prefers the explicit language argument over the scenario language', async () => {
     const llm = await loadWithProvider('hybrid');
     expect((await llm.getPartnerResponse({ language: 'yoruba' }, 'beginner', [], 'hi', 'hausa')).reply).toBe('aya');
+    expect((await llm.getPartnerResponse({ language: 'hausa' }, 'beginner', [], 'hi', 'yoruba')).reply).toBe('gemini');
   });
 
   it('still lets LLM_PROVIDER=morena and =aya select a single model', async () => {

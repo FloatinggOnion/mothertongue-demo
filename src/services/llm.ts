@@ -15,7 +15,8 @@ import * as ayaService from './aya';
  * LLM_PROVIDER=aya               — Tiny Aya (Cohere API) for getPartnerResponse;
  *                                  Gemini for everything else.
  * LLM_PROVIDER=hybrid            — getPartnerResponse picks a model per language
- *                                  (PARTNER_BY_LANGUAGE); Gemini for everything else.
+ *                                  (PARTNER_BY_LANGUAGE: Tiny Aya for Hausa and
+ *                                  Igbo, Gemini for Yoruba); Gemini for everything else.
  */
 const PROVIDER = (process.env.LLM_PROVIDER || 'gemini').toLowerCase();
 
@@ -24,11 +25,12 @@ const baseImpl = PROVIDER === 'groq' ? groqService : geminiService;
 /**
  * Partner model per language for LLM_PROVIDER=hybrid. From a head-to-head on
  * the live endpoints (2026-09-28): Tiny Aya Earth stayed in role and answered
- * on-topic in Hausa and Igbo; in Yoruba it misread questions, where Morena
- * did better. Unlisted languages use Gemini.
+ * on-topic in Hausa and Igbo; in Yoruba it misread questions. Morena did better
+ * there but its scaled-to-zero cold start reached ~100 s, so Yoruba stays on
+ * Gemini pending native-speaker review. Unlisted languages use Gemini.
  */
 const PARTNER_BY_LANGUAGE: Record<string, typeof geminiService.getPartnerResponse> = {
-  yoruba: morenaService.getPartnerResponse,
+  yoruba: geminiService.getPartnerResponse,
   hausa: ayaService.getPartnerResponse,
   igbo: ayaService.getPartnerResponse,
 };
