@@ -1,6 +1,7 @@
 import * as groqService from './groq';
 import * as geminiService from './gemini';
 import * as morenaService from './morena';
+import * as ayaService from './aya';
 
 /**
  * Single switch point for which LLM backend powers the app.
@@ -11,13 +12,40 @@ import * as morenaService from './morena';
  *                                  Gemini handles the remaining structured-output
  *                                  tasks (eval, suggestions, classification, etc.)
  *                                  Note: Gemini credentials are still required.
+ * LLM_PROVIDER=aya               — Tiny Aya (Cohere API) for getPartnerResponse;
+ *                                  Gemini for everything else.
+ * LLM_PROVIDER=hybrid            — getPartnerResponse picks a model per language
+ *                                  (PARTNER_BY_LANGUAGE); Gemini for everything else.
  */
 const PROVIDER = (process.env.LLM_PROVIDER || 'gemini').toLowerCase();
 
 const baseImpl = PROVIDER === 'groq' ? groqService : geminiService;
 
+/**
+ * Partner model per language for LLM_PROVIDER=hybrid. From a head-to-head on
+ * the live endpoints (2026-09-28): Tiny Aya Earth stayed in role and answered
+ * on-topic in Hausa and Igbo; in Yoruba it misread questions, where Morena
+ * did better. Unlisted languages use Gemini.
+ */
+const PARTNER_BY_LANGUAGE: Record<string, typeof geminiService.getPartnerResponse> = {
+  yoruba: morenaService.getPartnerResponse,
+  hausa: ayaService.getPartnerResponse,
+  igbo: ayaService.getPartnerResponse,
+};
+
+const getHybridPartnerResponse: typeof geminiService.getPartnerResponse = (
+  scenario, proficiencyLevel, conversationHistory, userMessage, language
+) => {
+  const lang = (language || scenario?.language || '').toLowerCase();
+  const impl = PARTNER_BY_LANGUAGE[lang] ?? geminiService.getPartnerResponse;
+  return impl(scenario, proficiencyLevel, conversationHistory, userMessage, language);
+};
+
 export const getPartnerResponse =
-  PROVIDER === 'morena' ? morenaService.getPartnerResponse : baseImpl.getPartnerResponse;
+  PROVIDER === 'morena' ? morenaService.getPartnerResponse
+  : PROVIDER === 'aya' ? ayaService.getPartnerResponse
+  : PROVIDER === 'hybrid' ? getHybridPartnerResponse
+  : baseImpl.getPartnerResponse;
 export const getReplySuggestions = baseImpl.getReplySuggestions;
 export const evaluateConversation = baseImpl.evaluateConversation;
 export const assessProficiency = baseImpl.assessProficiency;

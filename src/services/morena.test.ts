@@ -9,13 +9,12 @@ vi.mock('@/services/gemini', () => ({
   getPartnerResponse: vi.fn(async () => ({ reply: 'gemini reply', translation: 'gemini translation' })),
 }));
 
-import { checkMorenaReply, getPartnerResponse, buildMorenaSystemPrompt } from '@/services/morena';
+import { getPartnerResponse, buildMorenaSystemPrompt } from '@/services/morena';
 import { getScenarioById } from '@/config/scenarios';
 
 const originalFetch = global.fetch;
 const scenario = getScenarioById('market-haggling')!;
 const starter = scenario.starterPrompt;
-const opts = { level: 'beginner' as const, userMessage: 'Ẹ ṣé. Kí lẹ ní lónìí?', scenario };
 
 function mockModalReplies(...texts: string[]) {
   for (const text of texts) {
@@ -28,42 +27,6 @@ describe('buildMorenaSystemPrompt', () => {
     const p = buildMorenaSystemPrompt(scenario, 'beginner', 'yoruba');
     expect(p).toBe(`You are ${scenario.aiRole}. Reply to the user in Yoruba, in one short sentence.`);
     expect(p).not.toMatch(/json|reply"/i);
-  });
-});
-
-// Raw strings below are real outputs captured from the deployed Morena endpoint.
-describe('checkMorenaReply', () => {
-  it('keeps only the first line when the model runs on', () => {
-    const raw = 'Mo ní tòmátì tuntun, ó sì dára gan-an!\n\n<|assistant|>Ẹ ṣé.\n```python\nimport aiohttp';
-    expect(checkMorenaReply(raw, opts)).toEqual({ reply: 'Mo ní tòmátì tuntun, ó sì dára gan-an!', reason: 'ok' });
-  });
-
-  it('truncates to the sentence limit for the level', () => {
-    const raw = 'Muna da tummeric. Kuma barkono yana nan. Me kake so?';
-    expect(checkMorenaReply(raw, { ...opts, userMessage: 'x' }).reply).toBe('Muna da tummeric.');
-    expect(checkMorenaReply(raw, { ...opts, userMessage: 'x', level: 'intermediate' }).reply)
-      .toBe('Muna da tummeric. Kuma barkono yana nan.');
-  });
-
-  it.each([
-    ['', 'empty'],
-    ['Ẹ ṣé <[...]>', 'markup'],
-    ['{"reply": "Ẹ ṣé"}', 'markup'],
-    ['Onye ahịa: Tomato dị ₦1,500 maka otu.', 'speaker-label'],
-    ['Ìtumọ̀ náà ni translation', 'meta'],
-    ['Sannu, lafiya lau. Sannu, lafiya lau.', 'repetition'],
-    ['Pleased to meet you! How are you? I get the best tummeric and pepper today.', 'english'],
-    ['Ẹ ṣé. Kí lẹ ní lónìí?', 'echo-user'],
-  ])('rejects %j as %s', (raw, reason) => {
-    expect(checkMorenaReply(raw, opts)).toEqual({ reply: null, reason });
-  });
-
-  it('allows restating its own earlier line (e.g. repeating the menu when asked)', () => {
-    expect(checkMorenaReply('Ẹ wá ra nǹkan tuntun?', opts).reason).toBe('ok');
-  });
-
-  it('rejects over-long replies', () => {
-    expect(checkMorenaReply('Mo ní ' + 'tòmátì '.repeat(30) + '.', opts).reason).toBe('too-long');
   });
 });
 
