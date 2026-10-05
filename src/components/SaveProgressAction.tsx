@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@clerk/nextjs';
 import type { ProficiencyLevel } from '@/types';
+import { measure } from '@/lib/measurement-client';
 
 interface Props {
   scenarioId: string;
@@ -32,6 +33,7 @@ function ConfiguredSaveProgressAction({ scenarioId, proficiencyLevel, turnCount,
     savingRef.current = true;
     setStatus('saving');
     setError('');
+    measure({ event: 'save_requested', sessionId: sessionKey, scenarioId, proficiencyLevel, turnIndex: turnCount });
     try {
       const response = await fetch('/api/progress', {
         method: 'POST',
@@ -41,6 +43,7 @@ function ConfiguredSaveProgressAction({ scenarioId, proficiencyLevel, turnCount,
       const result = await response.json();
       if (!response.ok) throw new Error(result.error || 'Could not save progress');
       setStatus('saved');
+      measure({ event: 'save_succeeded', sessionId: sessionKey, scenarioId, proficiencyLevel, turnIndex: turnCount });
       const url = new URL(window.location.href);
       if (url.searchParams.get('save') === '1') {
         url.searchParams.delete('save');
@@ -48,6 +51,7 @@ function ConfiguredSaveProgressAction({ scenarioId, proficiencyLevel, turnCount,
       }
     } catch (cause) {
       setStatus('error');
+      measure({ event: 'save_failed', sessionId: sessionKey, scenarioId, proficiencyLevel, turnIndex: turnCount });
       setError(cause instanceof Error ? cause.message : 'Could not save progress');
     } finally {
       savingRef.current = false;

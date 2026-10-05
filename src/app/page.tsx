@@ -208,6 +208,7 @@ export default function Home() {
                 
                 <div className="flex flex-col items-start md:items-end gap-4">
                   <span className="font-display text-xl text-dark">Mother Tongue</span>
+                  <Link href="/privacy" className="font-ui text-xs text-accent hover:underline">Privacy &amp; conversation sharing</Link>
                 </div>
               </div>
             </footer>

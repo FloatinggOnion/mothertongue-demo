@@ -47,5 +47,6 @@ next-env.d.ts
 # JSON
 *.json
 !.planning/*.json
+!vercel.json
 
 hackathon.md

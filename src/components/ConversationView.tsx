@@ -1,18 +1,28 @@
 'use client';
 
 import { Message } from '@/types';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface MessageBubbleProps {
   message: Message;
   showTranslation?: boolean;
+  feedbackTurn?: number;
+  onReplyFeedback?: (turn: number, answer: 'yes' | 'no', reason?: 'missed_meaning' | 'changed_topic' | 'wrong_language' | 'unnatural' | 'other') => void;
 }
 
 export function MessageBubble({
   message,
   showTranslation = false,
+  feedbackTurn,
+  onReplyFeedback,
 }: MessageBubbleProps) {
   const [isHovered, setIsHovered] = useState(false);
+  const [rated, setRated] = useState(false);
+  const [needsReason, setNeedsReason] = useState(false);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setRated(sessionStorage.getItem(`mt:rated:${message.id}`) === '1'), 0);
+    return () => window.clearTimeout(timer);
+  }, [message.id]);
   const isUser = message.role === 'user';
   // Asides (both the user's question and the tutor's out-of-character
   // answer) render with a muted, dashed, unmistakably-not-roleplay
@@ -60,6 +70,31 @@ export function MessageBubble({
             {message.translation}
           </p>
         )}
+        {feedbackTurn !== undefined && onReplyFeedback && process.env.NEXT_PUBLIC_ANALYTICS_ENABLED === 'true' && !rated && (
+          <div className="border-t border-divider mt-3 pt-3">
+            <p className="font-ui text-[10px] text-text-secondary mb-2">Did your partner understand what you meant?</p>
+            {needsReason ? (
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ['missed_meaning', 'Missed my meaning'],
+                  ['changed_topic', 'Changed topic'],
+                  ['wrong_language', 'Wrong language'],
+                  ['unnatural', 'Unnatural wording'],
+                  ['other', 'Other'],
+                ] as const).map(([reason, label]) => (
+                  <button type="button" key={reason} onClick={() => { onReplyFeedback(feedbackTurn, 'no', reason); sessionStorage.setItem(`mt:rated:${message.id}`, '1'); setRated(true); }} className="font-ui text-[10px] border border-divider px-2 py-1 text-text-secondary hover:text-accent">{label}</button>
+                ))}
+                <button type="button" onClick={() => { onReplyFeedback(feedbackTurn, 'no'); sessionStorage.setItem(`mt:rated:${message.id}`, '1'); setRated(true); }} className="font-ui text-[10px] text-text-secondary underline">Skip reason</button>
+              </div>
+            ) : (
+              <div className="flex gap-3">
+                <button type="button" onClick={() => { onReplyFeedback(feedbackTurn, 'yes'); sessionStorage.setItem(`mt:rated:${message.id}`, '1'); setRated(true); }} className="font-ui text-[10px] text-accent underline">Yes</button>
+                <button type="button" onClick={() => setNeedsReason(true)} className="font-ui text-[10px] text-accent underline">No</button>
+                <button type="button" onClick={() => { sessionStorage.setItem(`mt:rated:${message.id}`, '1'); setRated(true); }} className="font-ui text-[10px] text-text-secondary underline">Skip</button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -78,6 +113,7 @@ interface ConversationViewProps {
     icon: string;
     language: 'yoruba' | 'hausa' | 'igbo';
   };
+  onReplyFeedback?: MessageBubbleProps['onReplyFeedback'];
 }
 
 export function ConversationView({
@@ -87,6 +123,7 @@ export function ConversationView({
   isListening = false,
   isSpeaking = false,
   scenario,
+  onReplyFeedback,
 }: ConversationViewProps) {
   return (
     <div className="flex-1 overflow-y-auto px-4 py-8 space-y-4">
@@ -114,9 +151,13 @@ export function ConversationView({
         </div>
       )}
 
-      {messages.map((message) => (
-        <MessageBubble key={message.id} message={message} />
-      ))}
+      {messages.map((message, index) => {
+        const learnerTurnCount = messages.slice(0, index).filter((item) => item.role === 'user' && (!item.kind || item.kind === 'roleplay')).length;
+        const feedbackTurn = message.role === 'ai' && (!message.kind || message.kind === 'roleplay') && learnerTurnCount > 0 && (learnerTurnCount === 1 || learnerTurnCount % 3 === 0)
+          ? learnerTurnCount
+          : undefined;
+        return <MessageBubble key={message.id} message={message} feedbackTurn={feedbackTurn} onReplyFeedback={onReplyFeedback} />;
+      })}
 
       {/* Listening Indicator */}
       {isListening && (

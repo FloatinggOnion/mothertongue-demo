@@ -25,6 +25,8 @@ import {
 import { loadSession, saveSession, clearSession } from '@/lib/session-store';
 import { roleplayHistory } from '@/lib/conversation';
 import { SaveProgressAction } from '@/components/SaveProgressAction';
+import { ShareConversationAction } from '@/components/ShareConversationAction';
+import { measure } from '@/lib/measurement-client';
 
 /* Hallmark · genre: editorial · macrostructure: Editorial Split · design-system: design.md */
 
@@ -95,6 +97,13 @@ export default function DrillPage() {
     messagesRef.current = resolved;
     setMessages(resolved);
   }, []);
+  useEffect(() => {
+    if (!scenario || !sessionKey) return;
+    const marker = `mt:measured-start:${sessionKey}`;
+    if (sessionStorage.getItem(marker)) return;
+    sessionStorage.setItem(marker, '1');
+    measure({ event: 'scenario_started', sessionId: sessionKey, scenarioId: scenario.id, proficiencyLevel: startingLevel });
+  }, [scenario, sessionKey, startingLevel]);
   // Kept in sync so the memoised useSpeechRecognition callback (which
   // closes over stale state) always reads the current armed state.
   const asideModeRef = useRef(asideMode);
@@ -104,7 +113,7 @@ export default function DrillPage() {
 
   // Upgrade loading indicator to warm-up message if response takes >5 s
   useEffect(() => {
-    if (!isLoading) { setWarmingUp(false); return; }
+    if (!isLoading) return;
     const t = setTimeout(() => setWarmingUp(true), 5000);
     return () => clearTimeout(t);
   }, [isLoading]);
@@ -115,7 +124,7 @@ export default function DrillPage() {
 
   // Read history before scheduling a React state update. An updater callback
   // may run later, so it cannot be used to capture history for this request.
-  const sendMessage = useCallback(async (userText: string, opts?: { forceAside?: boolean }) => {
+  const sendMessage = useCallback(async (userText: string, opts?: { forceAside?: boolean; inputMode?: 'text' | 'voice'; retry?: boolean }) => {
     if (!userText.trim() || !scenario) return;
 
     suggestionRequestRef.current += 1;
@@ -137,8 +146,12 @@ export default function DrillPage() {
     const previousMessages = messagesRef.current;
     replaceMessages([...previousMessages, userMessage]);
     const currentHistory: Message[] = [...previousMessages, userMessage];
+    const turnIndex = roleplayHistory(currentHistory).filter((message) => message.role === 'user').length;
+    if (!opts?.retry) measure({ event: 'learner_turn_sent', sessionId: sessionKey, scenarioId: scenario.id, proficiencyLevel, turnIndex, inputMode: opts?.inputMode ?? 'text' });
 
+    setWarmingUp(false);
     setIsLoading(true);
+    const requestStartedAt = performance.now();
 
     try {
       const response = await fetch('/api/chat', {
@@ -177,6 +190,7 @@ export default function DrillPage() {
         // No speak() — the answer is English tutor prose, not a target-language
         // partner line. No assess-level trigger — asides don't reflect roleplay ability.
       } else if (data.reply) {
+        measure({ event: 'partner_reply_succeeded', sessionId: sessionKey, scenarioId: scenario.id, proficiencyLevel, turnIndex, durationMs: Math.min(180000, Math.round(performance.now() - requestStartedAt)) });
         const aiMessage: Message = {
           id: crypto.randomUUID(),
           role: 'ai',
@@ -216,12 +230,14 @@ export default function DrillPage() {
       }
     } catch (error) {
       console.error('Failed to get AI response:', error);
+      measure({ event: 'partner_reply_failed', sessionId: sessionKey, scenarioId: scenario.id, proficiencyLevel, turnIndex, durationMs: Math.min(180000, Math.round(performance.now() - requestStartedAt)) });
       setFailedTurn({ id: userMessage.id, text: userText.trim(), forceAside: opts?.forceAside ?? false });
     } finally {
       setIsLoading(false);
+      setWarmingUp(false);
       setAsideMode(false);
     }
-  }, [scenario, proficiencyLevel, manualOverride, lastAssessedTurnCount, speak, replaceMessages]);
+  }, [scenario, proficiencyLevel, manualOverride, lastAssessedTurnCount, speak, replaceMessages, sessionKey]);
 
   // Speech recognition hook registered to pipeline transcription text seamlessly
   const {
@@ -237,7 +253,7 @@ export default function DrillPage() {
     lang: langBcp47(scenario?.language),
     onTranscriptionComplete: (finalizedText) => {
       if (finalizedText.trim()) {
-        sendMessage(finalizedText.trim(), { forceAside: asideModeRef.current });
+        sendMessage(finalizedText.trim(), { forceAside: asideModeRef.current, inputMode: 'voice' });
         resetTranscript();
       }
     }
@@ -296,6 +312,7 @@ export default function DrillPage() {
       isSpeaking ||
       isFetchingSuggestions
     ) return;
+    measure({ event: 'hint_opened', sessionId: sessionKey, scenarioId: scenario.id, proficiencyLevel, turnIndex: roleplayHistory(messages).filter((message) => message.role === 'user').length });
 
     const roleplayMessages = roleplayHistory(messages);
     const lastAiMessage = [...roleplayMessages].reverse().find((m) => m.role === 'ai');
@@ -376,7 +393,7 @@ export default function DrillPage() {
   const retryFailedTurn = () => {
     if (!failedTurn) return;
     replaceMessages((previous) => previous.filter((message) => message.id !== failedTurn.id));
-    sendMessage(failedTurn.text, { forceAside: failedTurn.forceAside });
+    sendMessage(failedTurn.text, { forceAside: failedTurn.forceAside, retry: true });
   };
 
   const editFailedTurn = () => {
@@ -427,6 +444,7 @@ export default function DrillPage() {
   };
 
   const handleEndDrill = async () => {
+    measure({ event: 'session_finished', sessionId: sessionKey, scenarioId, proficiencyLevel, turnIndex: roleplayHistory(messages).filter((message) => message.role === 'user').length });
     setDrillEnded(true);
     if (roleplayHistory(messages).filter((m) => m.role === 'user').length < 2) {
       setShowFeedback(true);
@@ -562,10 +580,14 @@ export default function DrillPage() {
                 <p className="font-body text-sm text-text-secondary mt-2">
                   Answer in {scenario.language.charAt(0).toUpperCase() + scenario.language.slice(1)} or English to begin. If you get stuck, ask for a nudge; you can reveal more help one step at a time.
                 </p>
+                <p className="font-body text-xs text-text-secondary mt-3">
+                  Your messages are sent to AI services to run this practice. We only save text for human review if you choose to share it after the session. <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-accent underline">Privacy details</a>
+                </p>
               </section>
             )}
             <ConversationView
               messages={messages}
+              onReplyFeedback={(turnIndex, answer, reason) => measure({ event: 'reply_understood', sessionId: sessionKey, scenarioId, proficiencyLevel, turnIndex, answer, reason })}
               isLoading={isLoading}
               isWarmingUp={warmingUp}
               isListening={isListening}
@@ -647,7 +669,11 @@ export default function DrillPage() {
               <ReplySuggestions
                 suggestions={suggestions}
                 step={hintStep}
-                onAdvance={() => setHintStep((current) => current === 1 ? 2 : 3)}
+                onAdvance={() => {
+                  const next = hintStep === 1 ? 2 : 3;
+                  setHintStep(next);
+                  measure({ event: 'hint_step_revealed', sessionId: sessionKey, scenarioId, proficiencyLevel, hintStep: next });
+                }}
                 onSelect={handleSuggestionSelect}
                 isVisible={showSuggestions && !drillEnded && !isListening && !isSpeaking}
               />
@@ -763,6 +789,7 @@ export default function DrillPage() {
                 onContinue: continueDrill,
                 onClose: leaveDrill,
                 saveAction: metrics.turnCount > 0 ? <SaveProgressAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} turnCount={metrics.turnCount} sessionKey={sessionKey} /> : undefined,
+                shareAction: metrics.turnCount > 0 ? <ShareConversationAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} messages={messages} /> : undefined,
               }
               : evaluationError
               ? {
@@ -772,6 +799,7 @@ export default function DrillPage() {
                 onContinue: continueDrill,
                 onClose: leaveDrill,
                 saveAction: metrics.turnCount > 0 ? <SaveProgressAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} turnCount={metrics.turnCount} sessionKey={sessionKey} /> : undefined,
+                shareAction: metrics.turnCount > 0 ? <ShareConversationAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} messages={messages} /> : undefined,
               }
               : {
                 state: 'success' as const,
@@ -781,6 +809,7 @@ export default function DrillPage() {
                 startingLevel,
                 onClose: leaveDrill,
                 saveAction: metrics.turnCount > 0 ? <SaveProgressAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} turnCount={metrics.turnCount} sessionKey={sessionKey} /> : undefined,
+                shareAction: metrics.turnCount > 0 ? <ShareConversationAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} messages={messages} /> : undefined,
                 onTryAgain: () => {
                   clearSession(scenarioId);
                   setSessionKey(crypto.randomUUID());

@@ -19,6 +19,7 @@ type FeedbackCardProps =
       onClose: () => void;
       onTryAgain: () => void;
       saveAction?: ReactNode;
+      shareAction?: ReactNode;
     }
   | {
       state: 'error';
@@ -27,12 +28,14 @@ type FeedbackCardProps =
       onContinue: () => void;
       onClose: () => void;
       saveAction?: ReactNode;
+      shareAction?: ReactNode;
     }
   | {
       state: 'short';
       onContinue: () => void;
       onClose: () => void;
       saveAction?: ReactNode;
+      shareAction?: ReactNode;
     };
 
 export function FeedbackCard(props: FeedbackCardProps) {
@@ -45,7 +48,7 @@ export function FeedbackCard(props: FeedbackCardProps) {
   return <SuccessState {...props} />;
 }
 
-function ShortSessionState({ onContinue, onClose, saveAction }: Extract<FeedbackCardProps, { state: 'short' }>) {
+function ShortSessionState({ onContinue, onClose, saveAction, shareAction }: Extract<FeedbackCardProps, { state: 'short' }>) {
   return (
     <div className="fixed inset-0 bg-[#1A2744]/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
       <div className="bg-[#F5F0E8] rounded-lg max-w-lg w-full p-6 md:p-8 border border-[#D9D2C7] shadow-xl text-center">
@@ -54,6 +57,7 @@ function ShortSessionState({ onContinue, onClose, saveAction }: Extract<Feedback
           We need a little more conversation to give useful feedback. You can keep talking or finish without a score.
         </p>
         {saveAction && <div className="flex justify-center mb-5">{saveAction}</div>}
+        {shareAction}
         <div className="flex flex-col sm:flex-row gap-3">
           <button onClick={onContinue} className="flex-1 py-3 px-4 rounded-sm bg-[#C4622D] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest">
             Keep talking
@@ -75,6 +79,7 @@ function SuccessState({
   onClose,
   onTryAgain,
   saveAction,
+  shareAction,
 }: Extract<FeedbackCardProps, { state: 'success' }>) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -202,6 +207,7 @@ function SuccessState({
 
         {/* Actions */}
         {saveAction && <div className="flex justify-center mb-5">{saveAction}</div>}
+        {shareAction}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={onTryAgain}
@@ -227,6 +233,7 @@ function ErrorState({
   onContinue,
   onClose,
   saveAction,
+  shareAction,
 }: Extract<FeedbackCardProps, { state: 'error' }>) {
   return (
     <div className="fixed inset-0 bg-[#1A2744]/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
@@ -245,6 +252,7 @@ function ErrorState({
         </div>
 
         {saveAction && <div className="flex justify-center mb-5">{saveAction}</div>}
+        {shareAction}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={onRetry}

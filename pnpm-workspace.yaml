@@ -1,0 +1,9 @@
+packages:
+  - .
+
+# pnpm 11 blocks dependency install scripts unless each package is reviewed.
+allowBuilds:
+  '@google/genai': false # preinstall only prints a no-op message
+  protobufjs: false # postinstall only prints a version-scheme warning
+  sharp: true # verifies its prebuilt image binary
+  unrs-resolver: true # verifies its prebuilt native resolver

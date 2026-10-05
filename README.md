@@ -70,7 +70,7 @@ As of version 0.1.0, the following capabilities have been validated:
 This repository contains the source code for the Mothertongue experimental platform.
 
 ### Prerequisites
-*   Node.js 20+
+*   Node.js 22+
 *   pnpm 11
 *   Groq API Key
 *   Google Cloud service account with Speech-to-Text + Text-to-Speech APIs enabled
@@ -104,6 +104,18 @@ Practice is available without an account. To enable the Save progress action:
 3. Restart `pnpm dev`. Practice a scenario, select **Save progress**, complete the email-code flow, then visit **My progress**. Add the same keys to your hosting provider's environment before deploying; use production Clerk keys for the live domain.
 
 Saved progress currently consists of scenario summaries and level. Conversation transcripts remain in the current browser and cannot yet be resumed on another device.
+
+### Enable web measurement for the learner pilot
+
+The [measurement plan](.planning/WEB-MEASUREMENT-PLAN.md) puts conversation coherence first. The code ships with both collection switches off. The privacy notice is at `/privacy`, with `jesseosems123@gmail.com` as the contact address. This setup covers the **web app only**.
+
+1. Create a dedicated **Mothertongue** project in PostHog Free. If your existing PostHog team belongs to another organization, use an organization you control for this project so the other team's members and usage are separate. Add the new project's key to `POSTHOG_PROJECT_KEY` and its matching `https://us.i.posthog.com` or `https://eu.i.posthog.com` ingest URL to `POSTHOG_HOST` in Vercel. Do not enable PostHog autocapture or session replay. Set `NEXT_PUBLIC_ANALYTICS_ENABLED=true` only when ready to collect structured events. The app sends events from its own server route and never sends conversation text to PostHog.
+2. Create a **Neon Free** project. Run [`neon/migrations/20261005_conversation_reviews.sql`](neon/migrations/20261005_conversation_reviews.sql) in its SQL editor. Add its pooled Postgres connection string as `NEON_DATABASE_URL` in Vercel. Keep the URL server-side; never prefix it `NEXT_PUBLIC_`. Set a long random `CRON_SECRET` in Vercel so the daily deletion route can run. Finally set `NEXT_PUBLIC_RESEARCH_SHARING_ENABLED=true`. The server refuses shares if the cleanup secret is absent.
+3. Deploy and verify on the live domain: start a scenario without signing in; finish it; confirm the sharing choice starts unchecked; choose **under 18** and confirm sharing is unavailable; choose **18 or older**, check the separate consent box, share a test conversation, and save its deletion receipt. Confirm the row appears in Neon without a Clerk ID or email, then delete it using `/privacy` and confirm the row disappears. Inspect PostHog for structured event names and no message text. Check the Vercel cron after its next run.
+
+This repository's [`pnpm-workspace.yaml`](pnpm-workspace.yaml) records reviewed pnpm 11 dependency build decisions. `pnpm install --frozen-lockfile` should run noninteractively on Vercel without `ERR_PNPM_IGNORED_BUILDS`; keep pnpm and the lockfile together when deploying.
+
+The sharing route schedules rows to expire on day 29; the daily Vercel cron removes expired rows by day 30 when it runs normally. Monitor cron failures, and manually delete expired rows if a scheduled run fails. Keep sharing disabled if the deletion job is not working. In PostHog, start with a funnel from `scenario_started` to `learner_turn_sent` and `session_finished`, a trend of `reply_understood` grouped by `answer`, and reply failure/latency trends grouped by language. The current first pilot has session-level pseudonymous metrics; account-level linkage and a formal reviewer dashboard are still pending.
 
 ---
 
