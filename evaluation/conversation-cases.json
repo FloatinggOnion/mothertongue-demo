@@ -1,0 +1,116 @@
+[
+  {
+    "id": "market-order-english",
+    "scenarioId": "market-haggling",
+    "level": "beginner",
+    "history": [],
+    "userMessage": "I want tomatoes, please.",
+    "intent": "The learner asks to buy tomatoes.",
+    "mustAddress": "Acknowledge tomatoes and continue the sale, for example with quantity or price.",
+    "failure": "Repeats a greeting, ignores tomatoes, or changes topic."
+  },
+  {
+    "id": "market-price-code-switch",
+    "scenarioId": "market-haggling",
+    "level": "beginner",
+    "history": [
+      { "role": "user", "content": "I want tomatoes." },
+      { "role": "ai", "content": "Ẹ fẹ́ melo?" }
+    ],
+    "userMessage": "Two baskets. Elo ni?",
+    "intent": "The learner wants two baskets and asks the price.",
+    "mustAddress": "Give or negotiate a price for two baskets.",
+    "failure": "Asks again what the learner wants or replies only to the quantity."
+  },
+  {
+    "id": "market-counteroffer",
+    "scenarioId": "market-haggling",
+    "level": "intermediate",
+    "history": [
+      { "role": "user", "content": "How much for two baskets of tomatoes?" },
+      { "role": "ai", "content": "Ẹgbẹ̀rún méjì ni." }
+    ],
+    "userMessage": "That's too much. Can you do 1,500?",
+    "intent": "The learner makes a counteroffer of 1,500.",
+    "mustAddress": "Accept, reject, or counter the proposed price while staying in the market scene.",
+    "failure": "Restarts the sale or quotes an unrelated price."
+  },
+  {
+    "id": "market-clarify-ambiguity",
+    "scenarioId": "market-haggling",
+    "level": "beginner",
+    "history": [],
+    "userMessage": "I want that one.",
+    "intent": "The learner points to an unspecified item.",
+    "mustAddress": "Ask which item they mean, without inventing a purchase.",
+    "failure": "Assumes a particular item or price without clarification."
+  },
+  {
+    "id": "elder-family-question",
+    "scenarioId": "greeting-elders",
+    "level": "beginner",
+    "history": [],
+    "userMessage": "I'm well, Grandma. My parents are fine too.",
+    "intent": "The learner answers the grandmother's question about their journey and family.",
+    "mustAddress": "Acknowledge the family's wellbeing and continue the visit warmly.",
+    "failure": "Repeats the same question about the parents as if unanswered."
+  },
+  {
+    "id": "elder-respect-register",
+    "scenarioId": "greeting-elders",
+    "level": "intermediate",
+    "history": [
+      { "role": "user", "content": "Ẹ kú àárọ̀, Màmá." },
+      { "role": "ai", "content": "Ẹ káàbọ̀, ọmọ mi. Báwo ni àwọn òbí rẹ?" }
+    ],
+    "userMessage": "Wọ́n wà dáadáa. Wọ́n ní kí n kí yín.",
+    "intent": "The learner says their parents are well and send greetings.",
+    "mustAddress": "Receive the parents' greetings in an elder-appropriate register.",
+    "failure": "Treats the learner as a peer or ignores the greetings."
+  },
+  {
+    "id": "food-order-english",
+    "scenarioId": "ordering-food",
+    "level": "beginner",
+    "history": [],
+    "userMessage": "Please give me amala and ewedu.",
+    "intent": "The learner orders amala and ewedu.",
+    "mustAddress": "Acknowledge the order and ask a natural next question or confirm a detail.",
+    "failure": "Asks what food the learner wants again."
+  },
+  {
+    "id": "food-unavailable-item",
+    "scenarioId": "ordering-food",
+    "level": "intermediate",
+    "history": [
+      { "role": "user", "content": "Do you have egusi?" },
+      { "role": "ai", "content": "Rárá, egusi ti tán, ṣùgbọ́n efo riro wà." }
+    ],
+    "userMessage": "Okay, I'll have efo riro instead.",
+    "intent": "The learner accepts efo riro as a substitute.",
+    "mustAddress": "Confirm the substitute order rather than repeating the unavailable-item explanation.",
+    "failure": "Offers egusi again or ignores the accepted substitute."
+  },
+  {
+    "id": "friends-topic-continuity",
+    "scenarioId": "chatting-friends",
+    "level": "intermediate",
+    "history": [
+      { "role": "ai", "content": "You don hear the latest about that match yesterday?" }
+    ],
+    "userMessage": "Yes, I watched it. The goalkeeper was amazing.",
+    "intent": "The learner comments on the goalkeeper in the match.",
+    "mustAddress": "React to the goalkeeper or the match and keep a casual friend register.",
+    "failure": "Changes to a new topic without acknowledging the football comment."
+  },
+  {
+    "id": "transport-destination",
+    "scenarioId": "transportation",
+    "level": "advanced",
+    "history": [],
+    "userMessage": "I need to get to Ikeja. Does this bus stop near the airport road?",
+    "intent": "The learner asks whether the bus stops near airport road on the way to Ikeja.",
+    "mustAddress": "Answer the stop question or state uncertainty while staying a conductor.",
+    "failure": "Merely repeats 'Ikeja' or tells the learner to board without addressing the stop."
+  }
+]

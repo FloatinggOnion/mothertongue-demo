@@ -11,6 +11,7 @@ interface PersistedSession {
   totalSpeakingTime: number;
   startingLevel: ProficiencyLevel;
   startedAt: number;
+  sessionKey?: string;
 }
 
 function key(scenarioId: string) {

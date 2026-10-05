@@ -23,7 +23,6 @@ export async function POST(request: NextRequest) {
     const {
       scenarioId: validatedScenarioId,
       messages,
-      language,
       proficiencyLevel,
     } = validationResult.data;
 
@@ -49,7 +48,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const evaluation = await evaluateConversation(scenario, messages, language, proficiencyLevel);
+    const evaluation = await evaluateConversation(scenario, messages, scenario.language, proficiencyLevel);
 
     return NextResponse.json(evaluation);
   } catch (error) {

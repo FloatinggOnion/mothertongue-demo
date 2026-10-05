@@ -6,13 +6,13 @@ import {
   DRIFT_LLM_CHECK_THRESHOLD,
   ASIDE_PATTERNS,
   buildDriftCheckSystemPrompt,
-  buildClassifyTurnSystemPrompt,
   buildAsideAnswerSystemPrompt,
+  buildPartnerReviewSystemPrompt,
   buildReplySuggestionsSystemPrompt,
   buildEvaluationSystemPrompt,
   buildProficiencyAssessmentSystemPrompt,
-  buildTranslationSystemPrompt,
 } from './promptLib';
+import { failedReviewAreas, parsePartnerReview, reviewAcceptsReply, reviewInput } from './partnerReview';
 
 // Helper to get API configurations cleanly
 const getApiKey = () => process.env.GROQ_API_KEY || '';
@@ -109,33 +109,12 @@ export type TurnKind = 'roleplay' | 'aside';
  * Classifies a user's turn as either an in-character roleplay line or an
  * out-of-character meta question ("aside") about the language itself.
  *
- * Stage 1 is a free heuristic regex match. Stage 2 falls back to a single
- * cheap Groq call when the heuristic doesn't match. Fail-safe direction:
- * any error, empty content, or unrecognized value resolves to 'roleplay' —
- * misrouting a roleplay line breaks the scene, whereas a missed aside is
- * recoverable via the manual Ask button.
+ * Recognizable language questions route to the tutor without a model call.
+ * Other turns stay in the scene; the manual Ask button handles less obvious
+ * side questions. This keeps normal conversation to one model request.
  */
-export async function classifyUserTurn(userMessage: string, language?: string): Promise<TurnKind> {
-  if (ASIDE_PATTERNS.some((pattern) => pattern.test(userMessage))) {
-    return 'aside';
-  }
-
-  const systemPrompt = buildClassifyTurnSystemPrompt(language);
-
-  try {
-    const rawText = await callGroq(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage },
-      ],
-      { json: true, temperature: 0 }
-    );
-    const parsed = JSON.parse(rawText || '{}');
-    return parsed.kind === 'aside' ? 'aside' : 'roleplay';
-  } catch (error) {
-    console.error('Error classifying user turn:', error);
-    return 'roleplay';
-  }
+export async function classifyUserTurn(userMessage: string, _language?: string): Promise<TurnKind> {
+  return ASIDE_PATTERNS.some((pattern) => pattern.test(userMessage)) ? 'aside' : 'roleplay';
 }
 
 /**
@@ -198,43 +177,41 @@ export async function getPartnerResponse(
   messages.push({ role: 'user', content: userMessage });
 
   try {
-    const rawText = await callGroq(messages, { json: true, temperature: 0.7 });
-    const parsed = JSON.parse(rawText || '{}');
-    let replyText = parsed.reply || '';
+    let repairNote = '';
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const attemptMessages = repairNote ? [...messages, { role: 'system', content: repairNote }] : messages;
+      const rawText = await callGroq(attemptMessages, { json: true, temperature: 0.7 });
+      const parsed = JSON.parse(rawText || '{}');
+      const replyText = typeof parsed.reply === 'string' ? parsed.reply.trim() : '';
+      if (!replyText) {
+        repairNote = `Return a nonempty, single in-character utterance from ${aiRole}.`;
+        continue;
+      }
 
-    const drifted = await detectRoleDrift(replyText, scenario, conversationHistory.length);
-    if (drifted) {
-      const correctiveMessages: { role: string; content: string }[] = [
-        ...messages,
-        {
-          role: 'system',
-          content: `Your previous attempt broke the role boundary by speaking for the user. This attempt must contain only ${aiRole}'s single utterance — never the user's line, never a speaker label, never narration for the user.`,
-        },
-      ];
-      const retryRawText = await callGroq(correctiveMessages, { json: true, temperature: 0.7 });
-      const retryParsed = JSON.parse(retryRawText || '{}');
-      // Use the retried reply unconditionally — no third attempt, no recursion.
-      replyText = retryParsed.reply || replyText;
+      if (await detectRoleDrift(replyText, scenario, attempt === 0 ? conversationHistory.length : 0)) {
+        repairNote = `Your previous reply spoke for the learner. Answer the learner's latest turn as ${aiRole} only, without a speaker label or narration.`;
+        continue;
+      }
+
+      try {
+        const auditRaw = await callGroq([
+          { role: 'system', content: buildPartnerReviewSystemPrompt(activeLang) },
+          { role: 'user', content: reviewInput(`${aiRole}. ${scenario?.description || ''} ${scenario?.context || ''}`, userMessage, replyText) },
+        ], { json: true, temperature: 0 });
+        const review = parsePartnerReview(auditRaw);
+        if (reviewAcceptsReply(review)) {
+          return { reply: replyText, translation: review.translation };
+        }
+        repairNote = `Your previous reply failed on ${failedReviewAreas(review)}. Address the learner's latest request accurately in ${activeLang}, as ${aiRole}.`;
+      } catch (error) {
+        console.error('Error reviewing partner reply:', error);
+        repairNote = `Answer the learner's latest request accurately in ${activeLang}, as ${aiRole}.`;
+      }
     }
-
-    // Handle background translation execution seamlessly. Translate only
-    // the final chosen reply, never a discarded drifted draft.
-    const translation = await translateToEnglish(replyText, activeLang);
-
-    return {
-      reply: replyText,
-      translation: translation,
-    };
+    throw new Error('Partner could not produce a relevant in-character reply');
   } catch (error) {
     console.error('Error generating partner response:', error);
-    return {
-      reply: activeLang.toLowerCase() === 'hausa'
-        ? 'Gafara gani, wani abu ya faru da kuskure.'
-        : activeLang.toLowerCase() === 'igbo'
-        ? 'Ndo, ihe ọjọọ mere.'
-        : 'E binu, nkankan ko tọ lẹnu igbiyanju mi.',
-      translation: 'Apologies, something went wrong with my response generation.',
-    };
+    throw error;
   }
 }
 
@@ -264,7 +241,7 @@ export async function getReplySuggestions(
     return JSON.parse(rawText || '{"suggestions":[]}');
   } catch (error) {
     console.error('Error generating suggestions:', error);
-    return { suggestions: [] };
+    throw error;
   }
 }
 
@@ -343,27 +320,5 @@ export async function assessProficiency(
   } catch (error) {
     console.error('Error assessing proficiency:', error);
     return { recommendedLevel: proficiencyLevel, rationale: '', confidence: 'low' };
-  }
-}
-
-/**
- * Utility translation engine internal module.
- */
-async function translateToEnglish(text: string, sourceLanguage: string): Promise<string> {
-  if (!text) return '';
-
-  const systemPrompt = buildTranslationSystemPrompt(sourceLanguage);
-
-  try {
-    const rawText = await callGroq(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: text },
-      ],
-      { json: false, temperature: 0.3 }
-    );
-    return rawText.trim();
-  } catch {
-    return '';
   }
 }

@@ -2,6 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getReplySuggestions } from '@/services/llm';
 import { getScenarioById } from '@/config/scenarios';
 import { SuggestionsSchema, getZodErrorMessage } from '@/lib/zod-schemas';
+import { z } from 'zod';
+
+const SuggestionsResponseSchema = z.object({
+  suggestions: z.array(z.object({
+    text: z.string().trim().min(1),
+    translation: z.string().default(''),
+    label: z.string().optional(),
+  })).min(1),
+});
 
 export async function POST(request: NextRequest) {
   try {
@@ -31,14 +40,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Safely inject the language onto the scenario context to pass it seamlessly
-    const fallbackData = validationResult.data as Record<string, any>;
-    const dynamicScenario = {
-      ...scenario,
-      language: fallbackData.language || 'yoruba'
-    };
+    const dynamicScenario = scenario;
 
-    // Get dynamic speech variations from Groq based on the selected language
+    // Validate model output before presenting it as learner guidance.
     const response = await getReplySuggestions(
       dynamicScenario,
       proficiencyLevel,
@@ -46,7 +50,12 @@ export async function POST(request: NextRequest) {
       lastAiMessage
     );
 
-    return NextResponse.json(response);
+    const parsedResponse = SuggestionsResponseSchema.safeParse(response);
+    if (!parsedResponse.success) {
+      return NextResponse.json({ error: 'Guidance is unavailable right now. Please try again.' }, { status: 502 });
+    }
+
+    return NextResponse.json(parsedResponse.data);
   } catch (error) {
     console.error('Suggestions API error:', error);
     return NextResponse.json(

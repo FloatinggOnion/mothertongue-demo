@@ -32,7 +32,7 @@ export function buildPartnerSystemPrompt(
   switch (proficiencyLevel) {
     case 'beginner':
       structuralInstruction = `
-        - Keep your utterances extremely short, simple, and clear (1 short sentence max).
+        - Keep your utterances short, simple, and clear. Use a second short sentence when needed to answer the learner and move the scene forward.
         - Use very basic vocabulary and standard expressions.
         - If the user uses English, gently guide them back to ${langDisplay} naturally.
       `;
@@ -63,6 +63,7 @@ export function buildPartnerSystemPrompt(
     - User Proficiency Level: ${proficiencyLevel.toUpperCase()}
     - Your Assigned Character Role: ${aiRole}
     - Scenario Setting/Context: ${scenario?.description || 'General Conversation'}
+    - Scene Details ("you" here refers to the learner, not your character): ${scenario?.context || 'No additional details'}
     - Starter Prompt Context: "${scenario?.starterPrompt || ''}"
 
     ROLE BOUNDARY (ABSOLUTE):
@@ -74,14 +75,39 @@ export function buildPartnerSystemPrompt(
     ROLEPLAY BEHAVIOR RULES:
     1. Stay 100% in character as "${aiRole}". Never break character to say "As an AI..." or "Welcome to this lesson...".
     2. Do not offer explicit grammar corrections or structured feedback in the middle of the chat flow. Act exactly like a real person would in this scenario.
-    3. Keep your response relevant to the conversational thread.
+    3. First understand the learner's latest turn, including English or mixed-language meaning. Answer what they asked or acknowledge what they requested before changing topic.
+    4. Advance this specific scene by one natural step. Do not restart with a generic greeting after the learner has answered the opener.
 
     LEVEL-SPECIFIC CONSTAINTS:
     ${structuralInstruction}
 
     OUTPUT FORMAT REQUIREMENTS:
     Return your response strictly as a JSON object with a single "reply" string key. Do not output anything outside the JSON structure.
-    Example: { "reply": "Pleased to meet you!" }
+  `.trim();
+}
+
+/**
+ * Reviews the candidate in the same call that supplies its UI translation.
+ * The model receives the learner turn and reply as data in a separate message.
+ * A relevant clarifying question is valid when the learner's meaning is unclear.
+ */
+export function buildPartnerReviewSystemPrompt(language?: string): string {
+  const langDisplay = langDisplayName(language);
+  return `
+    You review one reply from a ${langDisplay} conversation partner in a language-learning app.
+    The learner may write in English, ${langDisplay}, or both. Translate the partner reply into English.
+    Judge the partner reply against the learner's LATEST meaning and the scene, not just whether its words are grammatical.
+
+    Mark addressesLatestTurn false if it ignores a request, repeats an opening greeting instead of responding,
+    answers a different quantity or price, or speaks as the learner. If the learner's meaning is unclear,
+    a short in-character clarifying question can count as relevant.
+    Mark staysInScene false for a role swap, invented user dialogue, or an unrelated topic.
+    Mark inTargetLanguage false if the reply is primarily English instead of ${langDisplay}.
+    A brief loanword or proper noun does not fail this check.
+
+    Return strictly one JSON object with these exact fields:
+    {"translation":"English meaning of the partner reply","addressesLatestTurn":true,"staysInScene":true,"inTargetLanguage":true,"reason":"short reason if any check fails"}
+    Each check must be a JSON boolean. Do not output anything outside the object.
   `.trim();
 }
 

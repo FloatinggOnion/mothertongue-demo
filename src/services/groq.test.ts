@@ -12,6 +12,13 @@ function mockFetchOnce(body: unknown, ok = true, status = 200) {
   });
 }
 
+function acceptedReview(translation: string) {
+  return { choices: [{ message: { content: JSON.stringify({
+    translation, addressesLatestTurn: true, staysInScene: true,
+    inTargetLanguage: true, reason: '',
+  }) } }] };
+}
+
 // Mock the logger to avoid file system side effects in tests
 vi.mock('@/lib/logger', () => ({
   logError: vi.fn(),
@@ -158,37 +165,11 @@ describe('Groq Service', () => {
       expect(global.fetch).not.toHaveBeenCalled();
     });
 
-    it("issues one Groq call and resolves 'aside' when the model returns aside for a non-matching message", async () => {
-      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ kind: 'aside' }) } }] });
-
-      const result = await classifyUserTurn('Ile mi da?');
-
-      expect(result).toBe('aside');
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-    });
-
-    it("resolves 'roleplay' when the model returns roleplay", async () => {
-      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ kind: 'roleplay' }) } }] });
-
-      const result = await classifyUserTurn('Elo ni eleyi?');
-
-      expect(result).toBe('roleplay');
-    });
-
-    it('resolves roleplay (fail-safe) when the Groq call rejects', async () => {
-      (global.fetch as any).mockRejectedValueOnce(new Error('network down'));
-
-      const result = await classifyUserTurn('Elo ni eleyi?');
-
-      expect(result).toBe('roleplay');
-    });
-
-    it('resolves roleplay (fail-safe) when the Groq call returns unparsable JSON', async () => {
-      mockFetchOnce({ choices: [{ message: { content: '{not json}' } }] });
-
-      const result = await classifyUserTurn('Elo ni eleyi?');
-
-      expect(result).toBe('roleplay');
+    it("keeps ordinary learner turns in roleplay without calling Groq", async () => {
+      expect(await classifyUserTurn('Ile mi da?')).toBe('roleplay');
+      expect(await classifyUserTurn('Elo ni eleyi?')).toBe('roleplay');
+      expect(await classifyUserTurn('I want tomatoes, please.')).toBe('roleplay');
+      expect(global.fetch).not.toHaveBeenCalled();
     });
   });
 
@@ -266,7 +247,7 @@ describe('Groq Service', () => {
   describe('getPartnerResponse() — role-drift retry', () => {
     it("buildPartnerSystemPrompt output names the scenario aiRole and forbids voicing the user's dialogue", async () => {
       mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'Bawo ni, se o fe ra nkankan?' }) } }] });
-      mockFetchOnce({ choices: [{ message: { content: 'Hello, would you like to buy something?' } }] });
+      mockFetchOnce(acceptedReview('Hello, would you like to buy something?'));
 
       const scenario = { aiRole: 'Mama Nkechi', language: 'yoruba' } as any;
       await getPartnerResponse(scenario, 'beginner', [], 'Bawo ni');
@@ -281,7 +262,7 @@ describe('Groq Service', () => {
     it('regenerates exactly once when the first reply drifts: returns the second reply, total generation calls = 2', async () => {
       mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'You: How much is it?' } ) } }] }); // gen 1 — drifted (heuristic)
       mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'O ni owo meji lonu.' } ) } }] }); // gen 2 — clean retry
-      mockFetchOnce({ choices: [{ message: { content: 'It costs two hundred.' } }] }); // translation
+      mockFetchOnce(acceptedReview('It costs two hundred.')); // review and translation
 
       const scenario = { aiRole: 'Mama Nkechi', language: 'yoruba' } as any;
       const result = await getPartnerResponse(scenario, 'beginner', [], 'Elo ni?');
@@ -290,27 +271,72 @@ describe('Groq Service', () => {
       expect(countGenerationCalls()).toBe(2);
     });
 
-    it('returns the second reply even if it also drifts (no third attempt)', async () => {
+    it('rejects the second reply if it still drifts (no third attempt)', async () => {
       mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'You: How much is it?' } ) } }] }); // gen 1 — drifted
-      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'You: Still drifted.' } ) } }] }); // gen 2 — also drifted, used unconditionally
-      mockFetchOnce({ choices: [{ message: { content: 'Still drifted translation.' } }] }); // translation
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'You: Still drifted.' } ) } }] }); // gen 2 — also drifted
 
       const scenario = { aiRole: 'Mama Nkechi', language: 'yoruba' } as any;
-      const result = await getPartnerResponse(scenario, 'beginner', [], 'Elo ni?');
+      await expect(getPartnerResponse(scenario, 'beginner', [], 'Elo ni?'))
+        .rejects.toThrow('Partner could not produce a relevant in-character reply');
 
-      expect(result.reply).toBe('You: Still drifted.');
+      expect(countGenerationCalls()).toBe(2);
+    });
+
+    it('rejects a malformed retry instead of returning the original drifted reply', async () => {
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'You: How much is it?' } ) } }] });
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 42 }) } }] });
+
+      const scenario = { aiRole: 'Mama Nkechi', language: 'yoruba' } as any;
+      await expect(getPartnerResponse(scenario, 'beginner', [], 'Elo ni?'))
+        .rejects.toThrow('Partner could not produce a relevant in-character reply');
       expect(countGenerationCalls()).toBe(2);
     });
 
     it('makes only one generation call when the first reply is clean', async () => {
       mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'O daabo, se o fe ra nkankan?' } ) } }] }); // gen 1 — clean
-      mockFetchOnce({ choices: [{ message: { content: 'Welcome, would you like to buy something?' } }] }); // translation
+      mockFetchOnce(acceptedReview('Welcome, would you like to buy something?')); // review and translation
 
       const scenario = { aiRole: 'Mama Nkechi', language: 'yoruba' } as any;
       const result = await getPartnerResponse(scenario, 'beginner', [], 'Bawo ni');
 
       expect(result.reply).toBe('O daabo, se o fe ra nkankan?');
       expect(countGenerationCalls()).toBe(1);
+    });
+
+    it('repairs a greeting that ignores a tomato request before showing it', async () => {
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'Ẹ kú àárọ̀, Mama Nkechi.' }) } }] });
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({
+        translation: 'Good morning, Mama Nkechi.', addressesLatestTurn: false,
+        staysInScene: false, inTargetLanguage: true,
+        reason: 'The learner asked to buy tomatoes but received a greeting.',
+      }) } }] });
+      mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'Ẹ fẹ́ tòmátì mélòó?' }) } }] });
+      mockFetchOnce(acceptedReview('How many tomatoes would you like?'));
+
+      const result = await getPartnerResponse(
+        { aiRole: 'Mama Nkechi', language: 'yoruba', description: 'Market sale' },
+        'beginner', [], 'I want tomatoes, please.'
+      );
+
+      expect(result).toEqual({ reply: 'Ẹ fẹ́ tòmátì mélòó?', translation: 'How many tomatoes would you like?' });
+      expect(countGenerationCalls()).toBe(2);
+    });
+
+    it('rejects an English-only reply after one failed repair', async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        mockFetchOnce({ choices: [{ message: { content: JSON.stringify({ reply: 'One basket costs 500 Naira.' }) } }] });
+        mockFetchOnce({ choices: [{ message: { content: JSON.stringify({
+          translation: 'One basket costs 500 Naira.', addressesLatestTurn: false,
+          staysInScene: true, inTargetLanguage: false,
+          reason: 'English answer and wrong quantity.',
+        }) } }] });
+      }
+
+      await expect(getPartnerResponse(
+        { aiRole: 'Mama Nkechi', language: 'yoruba', description: 'Market sale' },
+        'beginner', [], 'How much for two baskets?'
+      )).rejects.toThrow('Partner could not produce a relevant in-character reply');
+      expect(countGenerationCalls()).toBe(2);
     });
   });
 });

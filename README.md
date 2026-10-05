@@ -70,7 +70,8 @@ As of version 0.1.0, the following capabilities have been validated:
 This repository contains the source code for the Mothertongue experimental platform.
 
 ### Prerequisites
-*   Node.js 18+
+*   Node.js 20+
+*   pnpm 11
 *   Groq API Key
 *   Google Cloud service account with Speech-to-Text + Text-to-Speech APIs enabled
 *   Intron API Key (Hausa TTS only)
@@ -79,25 +80,31 @@ This repository contains the source code for the Mothertongue experimental platf
 
 ```bash
 # 1. Clone the repository
-git clone https://github.com/yourusername/mothertongue-demo.git
+git clone https://github.com/FloatinggOnion/mothertongue-demo.git
 
 # 2. Install dependencies
-yarn install
-or
-npm install
+pnpm install
 
 # 3. Configure Environment
 # Copy .env.example to .env.local and fill in your keys:
 cp .env.example .env.local
 
 # 4. Run the development server
-yarn dev
-or
-npm run dev
+pnpm dev
 ```
 
 Visit `http://localhost:3000` to interact with the system.
 
+### Enable saved progress with Clerk
+
+Practice is available without an account. To enable the Save progress action:
+
+1. In your existing Clerk application, open **User & authentication**. Allow email sign-up and sign-in with **email verification codes**. Turn off email links, passwords, phone, passkeys, and social/SSO connections if email codes must be the only option. The prebuilt Clerk forms follow the application's enabled methods.
+2. Copy the Clerk publishable and secret keys from **API keys** into `.env.local` as `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` and `CLERK_SECRET_KEY`. Keep the secret key out of Git. Set `NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in` and `NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up` as shown in `.env.example`.
+3. Restart `pnpm dev`. Practice a scenario, select **Save progress**, complete the email-code flow, then visit **My progress**. Add the same keys to your hosting provider's environment before deploying; use production Clerk keys for the live domain.
+
+Saved progress currently consists of scenario summaries and level. Conversation transcripts remain in the current browser and cannot yet be resumed on another device.
+
 ---
 
-*Built with Next.js 15, Tailwind CSS, and Groq (Llama 3.3).*
+*Built with Next.js 16 and Tailwind CSS.*

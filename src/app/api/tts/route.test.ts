@@ -1,14 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { NextRequest } from 'next/server';
 
-const { synthesizeSpeechMock } = vi.hoisted(() => ({ synthesizeSpeechMock: vi.fn() }));
-
-vi.mock('@google-cloud/text-to-speech', () => ({
-  TextToSpeechClient: class {
-    synthesizeSpeech = synthesizeSpeechMock;
-  },
-}));
-
 import { POST } from './route';
 
 const originalFetch = global.fetch;
@@ -19,7 +11,6 @@ function makeRequest(body: unknown) {
 
 describe('POST /api/tts', () => {
   beforeEach(() => {
-    synthesizeSpeechMock.mockReset();
     global.fetch = vi.fn() as any;
     process.env.INTRON_API_KEY = 'test-key';
   });
@@ -29,35 +20,30 @@ describe('POST /api/tts', () => {
     vi.restoreAllMocks();
   });
 
-  it('synthesizes Yoruba speech via Google TTS with gender-mapped ssmlGender', async () => {
-    synthesizeSpeechMock.mockResolvedValueOnce([
-      { audioContent: Buffer.from('fake-audio') },
-    ]);
+  it('synthesizes Yoruba speech via Intron with the requested voice gender', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { audio_path: 'http://audio.intron.io/yoruba.wav' } }) })
+      .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
 
     const request = makeRequest({ text: 'Ẹ kú àárọ̀', gender: 'female', language: 'yoruba' });
     const response = await POST(request);
 
     expect(response.status).toBe(200);
-    expect(synthesizeSpeechMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        voice: expect.objectContaining({ languageCode: 'yo-NG', ssmlGender: 'FEMALE' }),
-      })
-    );
+    const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect(body).toMatchObject({ voice_language: 'yo', voice_accent: 'yoruba', voice_gender: 'female' });
+    expect(global.fetch).toHaveBeenNthCalledWith(2, 'https://audio.intron.io/yoruba.wav');
   });
 
-  it('defaults to male voice when gender is omitted for Yoruba', async () => {
-    synthesizeSpeechMock.mockResolvedValueOnce([
-      { audioContent: Buffer.from('fake-audio') },
-    ]);
+  it('defaults to a female voice when gender is omitted', async () => {
+    (global.fetch as any)
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ data: { audio_path: 'https://audio.intron.io/yoruba.wav' } }) })
+      .mockResolvedValueOnce({ ok: true, arrayBuffer: async () => new ArrayBuffer(8) });
 
     const request = makeRequest({ text: 'hello', language: 'yoruba' });
     await POST(request);
 
-    expect(synthesizeSpeechMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        voice: expect.objectContaining({ ssmlGender: 'MALE' }),
-      })
-    );
+    const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect(body.voice_gender).toBe('female');
   });
 
   it('synthesizes Hausa speech via Intron, passing gender straight through', async () => {

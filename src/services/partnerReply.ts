@@ -1,6 +1,7 @@
 import { Message, ProficiencyLevel } from '@/types';
 import { hasHeuristicRoleDrift } from './promptLib';
-import { translateToEnglish, getPartnerResponse as getGeminiPartnerResponse } from './gemini';
+import { reviewPartnerReply, getPartnerResponse as getGeminiPartnerResponse } from './gemini';
+import { reviewAcceptsReply } from './partnerReview';
 
 /**
  * Shared machinery for the small African-language partner models (Morena,
@@ -126,8 +127,8 @@ export function toChatTurns(history: Message[], userMessage: string): ChatTurn[]
 }
 
 /**
- * Samples a reply from `generate` until one passes checkPartnerReply, then
- * translates it. Rejections are correlated (the same prompt tends to fail the
+ * Samples a reply from `generate` until one passes format and conversation
+ * review. The review also supplies its translation. Rejections are correlated (the same prompt tends to fail the
  * same way on every retry), so after MAX_ATTEMPTS — or on any provider error —
  * the turn falls back to Gemini instead of showing an error.
  */
@@ -142,18 +143,28 @@ export async function runCheckedPartnerTurn(args: {
 }) {
   const { label, generate, scenario, level, history, userMessage, language } = args;
   try {
-    let replyText: string | null = null;
+    let accepted: { reply: string; translation: string } | null = null;
     const rejected: string[] = [];
-    for (let attempt = 0; attempt < MAX_ATTEMPTS && !replyText; attempt++) {
+    for (let attempt = 0; attempt < MAX_ATTEMPTS && !accepted; attempt++) {
       const check = checkPartnerReply(await generate(), { level, userMessage, scenario });
-      if (check.reply) replyText = check.reply;
-      else rejected.push(check.reason);
+      if (!check.reply) {
+        rejected.push(check.reason);
+        continue;
+      }
+      try {
+        const review = await reviewPartnerReply(scenario, userMessage, check.reply, language);
+        if (reviewAcceptsReply(review)) {
+          accepted = { reply: check.reply, translation: review.translation };
+        } else {
+          rejected.push('conversation-review');
+        }
+      } catch {
+        rejected.push('review-unavailable');
+      }
     }
     if (rejected.length) console.warn(`[${label}] rejected ${rejected.length} reply(s): ${rejected.join(', ')}`);
-    if (!replyText) throw new Error(`No acceptable reply after ${MAX_ATTEMPTS} attempts`);
-
-    const translation = await translateToEnglish(replyText, language);
-    return { reply: replyText, translation };
+    if (!accepted) throw new Error(`No acceptable reply after ${MAX_ATTEMPTS} attempts`);
+    return accepted;
   } catch (error) {
     console.error(`${label} error, falling back to Gemini for this turn:`, error);
     return getGeminiPartnerResponse(scenario, level, history, userMessage, language);

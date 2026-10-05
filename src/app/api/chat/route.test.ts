@@ -71,6 +71,17 @@ describe('POST /api/chat', () => {
     expect(getAsideAnswerMock).not.toHaveBeenCalled();
   });
 
+  it('uses the configured scenario language even when the client sends a conflicting value', async () => {
+    getScenarioByIdMock.mockReturnValueOnce({ ...baseScenario, language: 'hausa' });
+    classifyUserTurnMock.mockResolvedValueOnce('roleplay');
+    getPartnerResponseMock.mockResolvedValueOnce({ reply: 'Sannu', translation: 'Hello' });
+
+    await POST(makeRequest(baseBody({ language: 'yoruba' })));
+
+    expect(classifyUserTurnMock).toHaveBeenCalledWith('Elo ni eleyi?', 'hausa');
+    expect(getPartnerResponseMock.mock.calls[0][0].language).toBe('hausa');
+  });
+
   it('returns 200 with a discriminated aside body and calls getAsideAnswer, not getPartnerResponse', async () => {
     classifyUserTurnMock.mockResolvedValueOnce('aside');
     getAsideAnswerMock.mockResolvedValueOnce({ answer: "Tomati means 'tomato' in Yoruba." });

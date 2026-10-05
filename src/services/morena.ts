@@ -35,7 +35,7 @@ async function callModal(systemPrompt: string, messages: ChatTurn[], maxNewToken
  */
 export function buildMorenaSystemPrompt(scenario: any, level: ProficiencyLevel, language: string): string {
   const role = scenario?.aiRole || 'a conversation partner';
-  return `You are ${role}. Reply to the user in ${langDisplayName(language)}, ${SENTENCE_HINT[level]}.`;
+  return `You are ${role}. Answer the user's latest meaning in ${langDisplayName(language)}, ${SENTENCE_HINT[level]}. Stay in the scene.`;
 }
 
 export async function getPartnerResponse(

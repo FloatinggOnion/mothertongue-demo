@@ -19,8 +19,8 @@ export default function ScenariosPage() {
 function ScenariosContent() {
   const searchParams = useSearchParams();
   
-  // Extract and normalize the selected language parameter ('yoruba' | 'hausa')
-  const selectedLang = searchParams.get('lang')?.toLowerCase() || 'yoruba';
+  const requestedLang = searchParams.get('lang')?.toLowerCase();
+  const selectedLang = requestedLang === 'hausa' || requestedLang === 'igbo' ? requestedLang : 'yoruba';
 
   // Filter scenarios to match only the active language selection
   const filteredScenarios = scenarios.filter(
@@ -73,6 +73,10 @@ function ScenariosContent() {
             <span className="font-ui text-[10px] uppercase tracking-[0.25em]">Back to Home</span>
           </Link>
 
+          {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && (
+            <Link href="/progress" className="font-ui text-[10px] uppercase tracking-widest text-accent hover:underline">My progress</Link>
+          )}
+
           {/* Quick Filter Language Toggle Tab */}
           <div className="flex items-center gap-2 border border-divider p-1 rounded-md bg-paper/50 backdrop-blur-sm">
             <Link
@@ -95,6 +99,16 @@ function ScenariosContent() {
             >
               Hausa
             </Link>
+            <Link
+              href="/scenarios?lang=igbo"
+              className={`px-4 py-1.5 font-ui text-[10px] uppercase tracking-wider font-medium rounded transition-all duration-fast ${
+                selectedLang === 'igbo'
+                  ? 'bg-accent text-text-inverse shadow-sm'
+                  : 'text-text-secondary hover:text-dark'
+              }`}
+            >
+              Igbo
+            </Link>
           </div>
         </div>
 
@@ -104,10 +118,11 @@ function ScenariosContent() {
             {selectedLang} Scenarios
           </h1>
           <p className="font-body text-text-secondary text-body-lg leading-prose max-w-[50ch] animate-fade-in [animation-delay:100ms]">
-            {selectedLang === 'hausa' 
-              ? 'Pick a real-life northern scenario to test your fluency. Practice natural conversation protocols with cultural context.'
-              : 'Pick a real-life situation to test your fluency. From market haggling to greeting elders with proper respect.'
-            }
+            {selectedLang === 'hausa'
+              ? 'Pick a real-life northern scenario. Practice natural conversation with cultural context.'
+              : selectedLang === 'igbo'
+              ? 'Pick a real-life Igbo scenario. Practice everyday conversation with cultural context.'
+              : 'Pick a real-life situation to practice. From market haggling to greeting elders with proper respect.'}
           </p>
         </header>
 

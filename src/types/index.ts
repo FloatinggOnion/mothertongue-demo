@@ -71,6 +71,7 @@ export interface ProficiencyAssessment {
 export interface ReplySuggestion {
   text: string;
   translation: string;
+  label?: string;
 }
 
 export interface SilentEvaluation {

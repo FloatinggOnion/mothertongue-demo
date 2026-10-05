@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Inter, Lora } from "next/font/google";
+import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 
 const lora = Lora({
@@ -18,11 +19,13 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Mothertongue - Speak Yoruba with Confidence",
+  title: "Mothertongue - Practice Yoruba, Igbo, and Hausa",
   description:
-    "Practice speaking Yoruba with an AI partner who understands Nigerian culture. Real conversations, no judgment, just progress.",
+    "Practice Yoruba, Igbo, and Hausa through everyday conversations with an AI partner.",
   keywords: [
     "Yoruba",
+    "Igbo",
+    "Hausa",
     "language learning",
     "Nigerian",
     "speaking practice",
@@ -31,9 +34,9 @@ export const metadata: Metadata = {
   ],
   authors: [{ name: "Mothertongue Team" }],
   openGraph: {
-    title: "Mothertongue - Speak Yoruba with Confidence",
+    title: "Mothertongue - Practice Yoruba, Igbo, and Hausa",
     description:
-      "Practice speaking Yoruba with an AI partner who understands Nigerian culture.",
+      "Practice Yoruba, Igbo, and Hausa through everyday conversations with an AI partner.",
     type: "website",
   },
 };
@@ -46,7 +49,9 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${lora.variable} ${inter.variable} antialiased`}>
-        {children}
+        {process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY
+          ? <ClerkProvider>{children}</ClerkProvider>
+          : children}
       </body>
     </html>
   );

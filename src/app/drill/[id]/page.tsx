@@ -24,6 +24,7 @@ import {
 } from '@/types';
 import { loadSession, saveSession, clearSession } from '@/lib/session-store';
 import { roleplayHistory } from '@/lib/conversation';
+import { SaveProgressAction } from '@/components/SaveProgressAction';
 
 /* Hallmark · genre: editorial · macrostructure: Editorial Split · design-system: design.md */
 
@@ -55,6 +56,14 @@ export default function DrillPage() {
     if (typeof window === 'undefined') return scenario?.difficulty ?? 'beginner';
     return loadSession(scenarioId)?.startingLevel ?? scenario?.difficulty ?? 'beginner';
   });
+  const [sessionKey, setSessionKey] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    return loadSession(scenarioId)?.sessionKey ?? crypto.randomUUID();
+  });
+  const [startedAt, setStartedAt] = useState(() => {
+    if (typeof window === 'undefined') return 0;
+    return loadSession(scenarioId)?.startedAt ?? Date.now();
+  });
   const [levelSuggestion, setLevelSuggestion] = useState<{ to: ProficiencyLevel; rationale: string } | null>(null);
   const [lastAssessedTurnCount, setLastAssessedTurnCount] = useState(0);
   const [speakingStartTime, setSpeakingStartTime] = useState<number | null>(null);
@@ -63,6 +72,7 @@ export default function DrillPage() {
     return loadSession(scenarioId)?.totalSpeakingTime ?? 0;
   });
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [hintStep, setHintStep] = useState<1 | 2 | 3>(1);
   const [suggestions, setSuggestions] = useState<ReplySuggestion[]>([]);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [evaluationError, setEvaluationError] = useState<string | null>(null);
@@ -71,11 +81,20 @@ export default function DrillPage() {
   const [textInput, setTextInput] = useState('');
   const [useTextMode, setUseTextMode] = useState(false);
   const [isFetchingSuggestions, setIsFetchingSuggestions] = useState(false);
+  const [suggestionError, setSuggestionError] = useState<string | null>(null);
+  const [failedTurn, setFailedTurn] = useState<{ id: string; text: string; forceAside: boolean } | null>(null);
   const [asideMode, setAsideMode] = useState(false);
   const [warmingUp, setWarmingUp] = useState(false);
 
   // Refs
   const conversationRef = useRef<HTMLDivElement>(null);
+  const messagesRef = useRef<Message[]>([]);
+  const suggestionRequestRef = useRef(0);
+  const replaceMessages = useCallback((next: Message[] | ((previous: Message[]) => Message[])) => {
+    const resolved = typeof next === 'function' ? next(messagesRef.current) : next;
+    messagesRef.current = resolved;
+    setMessages(resolved);
+  }, []);
   // Kept in sync so the memoised useSpeechRecognition callback (which
   // closes over stale state) always reads the current armed state.
   const asideModeRef = useRef(asideMode);
@@ -94,11 +113,16 @@ export default function DrillPage() {
     lang: langBcp47(scenario?.language),
   });
 
-  // Send message to AI (Refactored to Functional Updates to capture current message arrays accurately)
+  // Read history before scheduling a React state update. An updater callback
+  // may run later, so it cannot be used to capture history for this request.
   const sendMessage = useCallback(async (userText: string, opts?: { forceAside?: boolean }) => {
     if (!userText.trim() || !scenario) return;
 
+    suggestionRequestRef.current += 1;
     setShowSuggestions(false);
+    setHintStep(1);
+    setSuggestionError(null);
+    setFailedTurn(null);
 
     const userMessage: Message = {
       id: crypto.randomUUID(),
@@ -110,11 +134,8 @@ export default function DrillPage() {
       kind: opts?.forceAside ? 'aside-question' : 'roleplay',
     };
 
-    let previousMessages: Message[] = [];
-    setMessages((prev) => {
-      previousMessages = prev;
-      return [...prev, userMessage];
-    });
+    const previousMessages = messagesRef.current;
+    replaceMessages([...previousMessages, userMessage]);
     const currentHistory: Message[] = [...previousMessages, userMessage];
 
     setIsLoading(true);
@@ -136,12 +157,13 @@ export default function DrillPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Your message could not be sent. Please try again.');
 
       if (data.kind === 'aside') {
         // Classification happened server-side after the optimistic append —
         // retro-tag the user's message and append the tutor's answer.
-        setMessages((prev) =>
+        replaceMessages((prev) =>
           prev.map((m) => (m.id === userMessage.id ? { ...m, kind: 'aside-question' as const } : m))
         );
         const asideAnswer: Message = {
@@ -151,7 +173,7 @@ export default function DrillPage() {
           kind: 'aside-answer',
           timestamp: Date.now(),
         };
-        setMessages((prev) => [...prev, asideAnswer]);
+        replaceMessages((prev) => [...prev, asideAnswer]);
         // No speak() — the answer is English tutor prose, not a target-language
         // partner line. No assess-level trigger — asides don't reflect roleplay ability.
       } else if (data.reply) {
@@ -163,7 +185,7 @@ export default function DrillPage() {
           timestamp: Date.now(),
           kind: 'roleplay',
         };
-        setMessages((prev) => [...prev, aiMessage]);
+        replaceMessages((prev) => [...prev, aiMessage]);
         speak(data.reply, scenario.gender);
 
         // Adaptive difficulty: assess every 4 user turns, counted from
@@ -189,16 +211,17 @@ export default function DrillPage() {
             })
             .catch(() => { });
         }
-      } else if (data.error) {
-        console.error('API error:', data.error);
+      } else {
+        throw new Error(data.error || 'The partner did not answer. Please try again.');
       }
     } catch (error) {
       console.error('Failed to get AI response:', error);
+      setFailedTurn({ id: userMessage.id, text: userText.trim(), forceAside: opts?.forceAside ?? false });
     } finally {
       setIsLoading(false);
       setAsideMode(false);
     }
-  }, [scenario, proficiencyLevel, manualOverride, lastAssessedTurnCount, speak]);
+  }, [scenario, proficiencyLevel, manualOverride, lastAssessedTurnCount, speak, replaceMessages]);
 
   // Speech recognition hook registered to pipeline transcription text seamlessly
   const {
@@ -222,29 +245,31 @@ export default function DrillPage() {
 
   useEffect(() => {
     const saved = loadSession(scenarioId)?.messages;
-    if (saved) setMessages(saved);
-  }, [scenarioId]);
+    if (saved) replaceMessages(saved);
+  }, [scenarioId, replaceMessages]);
 
   // Add initial AI message when scenario loads
   useEffect(() => {
-    if (scenario && messages.length === 0) {
+    if (scenario && messagesRef.current.length === 0) {
       const initialMessage: Message = {
         id: crypto.randomUUID(),
         role: 'ai',
         content: scenario.starterPrompt,
         timestamp: Date.now(),
       };
-      setMessages([initialMessage]);
+      replaceMessages([initialMessage]);
 
       // Speak the initial message
       speak(scenario.starterPrompt, scenario.gender);
     }
-  }, [scenario, messages.length, speak]);
+  }, [scenario, messages.length, speak, replaceMessages]);
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
     if (conversationRef.current) {
-      conversationRef.current.scrollTop = conversationRef.current.scrollHeight;
+      conversationRef.current.scrollTop = messages.some((message) => message.role === 'user')
+        ? conversationRef.current.scrollHeight
+        : 0;
     }
   }, [messages]);
 
@@ -258,9 +283,10 @@ export default function DrillPage() {
       turnScores: [],
       totalSpeakingTime,
       startingLevel,
-      startedAt: Date.now(),
+      startedAt,
+      sessionKey,
     });
-  }, [messages, proficiencyLevel, manualOverride, totalSpeakingTime, drillEnded, scenarioId, startingLevel]);
+  }, [messages, proficiencyLevel, manualOverride, totalSpeakingTime, drillEnded, scenarioId, startingLevel, startedAt, sessionKey]);
 
   const fetchSuggestions = async () => {
     if (
@@ -275,7 +301,9 @@ export default function DrillPage() {
     const lastAiMessage = [...roleplayMessages].reverse().find((m) => m.role === 'ai');
     if (!lastAiMessage) return;
 
+    const requestId = ++suggestionRequestRef.current;
     try {
+      setSuggestionError(null);
       setIsFetchingSuggestions(true);
 
       const response = await fetch('/api/suggestions', {
@@ -290,21 +318,31 @@ export default function DrillPage() {
         }),
       });
 
-      const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Guidance is unavailable right now. Please try again.');
+      if (!Array.isArray(data.suggestions) || data.suggestions.length === 0) {
+        throw new Error('No suggestions came back. Please try again.');
+      }
 
-      if (!isListening && !isSpeaking && data.suggestions) {
+      if (requestId === suggestionRequestRef.current && !isListening && !isSpeaking) {
         setSuggestions(data.suggestions);
+        setHintStep(1);
         setShowSuggestions(true);
       }
     } catch (error) {
       console.error('Failed to fetch suggestions:', error);
+      if (requestId === suggestionRequestRef.current && !isListening && !isSpeaking) {
+        setSuggestionError(error instanceof Error ? error.message : 'Guidance is unavailable right now. Please try again.');
+      }
     } finally {
       setIsFetchingSuggestions(false);
     }
   };
 
   const handleMicPress = useCallback(() => {
+    suggestionRequestRef.current += 1;
     setShowSuggestions(false);
+    setHintStep(1);
     setSpeakingStartTime(Date.now());
     startListening();
   }, [startListening]);
@@ -321,16 +359,32 @@ export default function DrillPage() {
 
   const handleTextSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!textInput.trim()) return;
+    if (!textInput.trim() || failedTurn) return;
 
     const text = textInput;
     setTextInput('');
     await sendMessage(text, { forceAside: asideMode });
   };
 
-  const handleSuggestionSelect = async (text: string) => {
+  const handleSuggestionSelect = (text: string) => {
     setShowSuggestions(false);
-    await sendMessage(text);
+    setHintStep(1);
+    setTextInput(text);
+    setUseTextMode(true);
+  };
+
+  const retryFailedTurn = () => {
+    if (!failedTurn) return;
+    replaceMessages((previous) => previous.filter((message) => message.id !== failedTurn.id));
+    sendMessage(failedTurn.text, { forceAside: failedTurn.forceAside });
+  };
+
+  const editFailedTurn = () => {
+    if (!failedTurn) return;
+    replaceMessages((previous) => previous.filter((message) => message.id !== failedTurn.id));
+    setTextInput(failedTurn.text);
+    setUseTextMode(true);
+    setFailedTurn(null);
   };
 
   const fetchEvaluation = async () => {
@@ -374,8 +428,22 @@ export default function DrillPage() {
 
   const handleEndDrill = async () => {
     setDrillEnded(true);
-    clearSession(scenarioId);
+    if (roleplayHistory(messages).filter((m) => m.role === 'user').length < 2) {
+      setShowFeedback(true);
+      return;
+    }
     await fetchEvaluation();
+  };
+
+  const continueDrill = () => {
+    setShowFeedback(false);
+    setEvaluationError(null);
+    setDrillEnded(false);
+  };
+
+  const leaveDrill = () => {
+    clearSession(scenarioId);
+    router.push(`/scenarios?lang=${scenario?.language ?? 'yoruba'}`);
   };
 
   const roleplayMessages = roleplayHistory(messages);
@@ -404,12 +472,12 @@ export default function DrillPage() {
   }
 
   return (
-    <main className="relative min-h-screen bg-paper flex flex-col md:flex-row selection:bg-accent/30">
+    <main className="relative h-dvh overflow-hidden bg-paper flex flex-col md:flex-row selection:bg-accent/30">
       <img src="/native.jpg" alt="" aria-hidden="true" className="fixed top-[-5%] right-[-5%] w-[400px] opacity-[0.08] rotate-[15deg] pointer-events-none z-0" />
       <img src="/native.jpg" alt="" aria-hidden="true" className="fixed bottom-[10%] left-[-10%] w-[350px] opacity-[0.06] rotate-[-10deg] pointer-events-none z-0" />
 
       {/* Left Rail (Desktop) */}
-      <aside className="hidden md:flex w-[120px] lg:w-[140px] flex-col items-center py-12 border-r border-divider sticky top-0 h-screen shrink-0 z-20 bg-paper/50 backdrop-blur-sm">
+      <aside className="hidden md:flex w-[120px] lg:w-[140px] flex-col items-center py-12 border-r border-divider h-dvh shrink-0 z-20 bg-paper/50 backdrop-blur-sm">
         <button
           onClick={() => router.push(`/scenarios?lang=${scenario.language}`)}
           className="group mb-12 hover:translate-x-[-2px] transition-transform duration-base"
@@ -431,10 +499,10 @@ export default function DrillPage() {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-grow flex flex-col min-w-0 relative z-10">
+      <div className="flex-grow flex flex-col min-w-0 min-h-0 relative z-10">
 
         {/* Header */}
-        <header className="sticky top-0 z-30 bg-paper/80 backdrop-blur-lg border-b border-divider px-6 py-4">
+        <header className="shrink-0 z-30 bg-paper/80 backdrop-blur-lg border-b border-divider px-6 py-4">
           <div className="max-w-2xl mx-auto flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
@@ -453,7 +521,7 @@ export default function DrillPage() {
                   <span className="font-ui text-label text-accent uppercase tracking-widest hidden md:block">Session in Progress</span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">
-                  <span className="md:hidden font-ui text-[10px] uppercase tracking-wider text-text-secondary">{scenario.aiRole}</span>
+                  <span title={scenario.aiRole} className="md:hidden font-ui text-[10px] uppercase tracking-wider text-text-secondary truncate max-w-[120px]">{scenario.aiRole.split(',')[0]}</span>
                   <LevelBadge
                     level={proficiencyLevel}
                     manualOverride={manualOverride}
@@ -468,22 +536,34 @@ export default function DrillPage() {
               </div>
             </div>
 
+            <div className="flex items-center gap-2">
+            {metrics.turnCount > 0 && !showFeedback && <SaveProgressAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} turnCount={metrics.turnCount} sessionKey={sessionKey} />}
             <button
               onClick={handleEndDrill}
-              disabled={messages.length < 2 || drillEnded}
+              disabled={messages.length < 2 || drillEnded || isLoading || Boolean(failedTurn)}
               className="font-ui text-label uppercase tracking-widest px-4 py-2 bg-[var(--color-dark)] text-[var(--color-text-inverse)] hover:bg-accent transition-colors duration-fast disabled:opacity-50"
             >
-              End Drill
+              <span className="md:hidden">End</span><span className="hidden md:inline">End Drill</span>
             </button>
+            </div>
           </div>
         </header>
 
         {/* Conversation View */}
         <div
           ref={conversationRef}
-          className="flex-1 overflow-y-auto w-full pt-12 pb-24 scroll-smooth"
+          className="flex-1 min-h-0 overflow-y-auto w-full pt-8 pb-8 scroll-smooth"
         >
           <div className="max-w-2xl mx-auto w-full px-6">
+            {roleplayHistory(messages).every((message) => message.role !== 'user') && (
+              <section aria-label="Getting started" className="mb-8 border-l-2 border-accent bg-surface px-5 py-4">
+                <p className="font-ui text-[10px] uppercase tracking-widest text-accent mb-2">Your scene</p>
+                <p className="font-body text-sm text-text">{scenario.description}. You are speaking with {scenario.aiRole}.</p>
+                <p className="font-body text-sm text-text-secondary mt-2">
+                  Answer in {scenario.language.charAt(0).toUpperCase() + scenario.language.slice(1)} or English to begin. If you get stuck, ask for a nudge; you can reveal more help one step at a time.
+                </p>
+              </section>
+            )}
             <ConversationView
               messages={messages}
               isLoading={isLoading}
@@ -503,6 +583,16 @@ export default function DrillPage() {
               onStop={stop}
             />
 
+            {failedTurn && (
+              <div role="alert" className="mt-6 bg-surface border-l-2 border-accent px-5 py-4">
+                <p className="font-body text-sm text-text mb-3">The partner did not answer. Your message is still here.</p>
+                <div className="flex gap-4 font-ui text-xs text-accent">
+                  <button onClick={retryFailedTurn} type="button" className="underline underline-offset-4">Try again</button>
+                  <button onClick={editFailedTurn} type="button" className="underline underline-offset-4">Edit message</button>
+                </div>
+              </div>
+            )}
+
             {/* Live transcript widget display box */}
             {(transcript || interimTranscript) && (
               <div className="mt-8 animate-fade-in">
@@ -521,7 +611,7 @@ export default function DrillPage() {
         </div>
 
         {/* Interaction Surface */}
-        <div className="sticky bottom-0 bg-paper/95 backdrop-blur-md border-t border-divider pt-6 pb-8 md:pb-12">
+        <div className="shrink-0 max-h-[55dvh] overflow-y-auto bg-paper/95 backdrop-blur-md border-t border-divider pt-6 pb-8 md:pb-10">
           <div className="max-w-2xl mx-auto px-6">
 
             {/* Level adjustment suggestion banner */}
@@ -543,7 +633,7 @@ export default function DrillPage() {
 
             {/* Suggestions Tray */}
             <div className="flex flex-col items-center mb-6">
-              {!showSuggestions && !isListening && !isSpeaking && !isLoading && !drillEnded && (
+              {!showSuggestions && !isListening && !isSpeaking && !isLoading && !drillEnded && !failedTurn && (
                 <button
                   onClick={fetchSuggestions}
                   disabled={isFetchingSuggestions}
@@ -556,9 +646,16 @@ export default function DrillPage() {
 
               <ReplySuggestions
                 suggestions={suggestions}
+                step={hintStep}
+                onAdvance={() => setHintStep((current) => current === 1 ? 2 : 3)}
                 onSelect={handleSuggestionSelect}
                 isVisible={showSuggestions && !drillEnded && !isListening && !isSpeaking}
               />
+              {suggestionError && !drillEnded && (
+                <p role="alert" className="mt-3 font-ui text-xs text-accent-warm text-center">
+                  {suggestionError}
+                </p>
+              )}
             </div>
 
             {/* Mode toggle selectors */}
@@ -591,7 +688,7 @@ export default function DrillPage() {
               <button
                 type="button"
                 onClick={() => setAsideMode((prev) => !prev)}
-                disabled={isLoading || drillEnded}
+                disabled={isLoading || drillEnded || Boolean(failedTurn)}
                 aria-pressed={asideMode}
                 className={`px-4 py-1.5 font-ui text-xs uppercase tracking-widest rounded-sm border border-dashed transition-colors duration-fast disabled:opacity-30 ${
                   asideMode
@@ -611,12 +708,12 @@ export default function DrillPage() {
                   value={textInput}
                   onChange={(e) => setTextInput(e.target.value)}
                   placeholder={`Respond in ${scenario.language.charAt(0).toUpperCase() + scenario.language.slice(1)} or English...`}
-                  disabled={isLoading || drillEnded}
+                  disabled={isLoading || drillEnded || Boolean(failedTurn)}
                   className="flex-1 bg-white border border-divider rounded-sm px-6 py-4 font-body text-text placeholder-text-secondary/50 focus:outline-none focus:border-accent transition-colors disabled:opacity-50"
                 />
                 <button
                   type="submit"
-                  disabled={!textInput.trim() || isLoading || drillEnded}
+                  disabled={!textInput.trim() || isLoading || drillEnded || Boolean(failedTurn)}
                   className="px-8 bg-accent text-text-inverse font-ui text-caption uppercase tracking-widest hover:bg-[#A84E22] transition-colors duration-fast disabled:opacity-30"
                 >
                   {isLoading ? '...' : 'Send'}
@@ -644,7 +741,7 @@ export default function DrillPage() {
                     <MicButton
                       isListening={isListening}
                       isSpeaking={isSpeaking}
-                      isLoading={isLoading}
+                      isLoading={isLoading || Boolean(failedTurn) || drillEnded}
                       onPress={handleMicPress}
                       onRelease={handleMicRelease}
                     />
@@ -660,12 +757,21 @@ export default function DrillPage() {
 
         {showFeedback && (
           <FeedbackCard
-            {...(evaluationError
+            {...(roleplayHistory(messages).filter((m) => m.role === 'user').length < 2
+              ? {
+                state: 'short' as const,
+                onContinue: continueDrill,
+                onClose: leaveDrill,
+                saveAction: metrics.turnCount > 0 ? <SaveProgressAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} turnCount={metrics.turnCount} sessionKey={sessionKey} /> : undefined,
+              }
+              : evaluationError
               ? {
                 state: 'error' as const,
                 errorMessage: evaluationError,
                 onRetry: fetchEvaluation,
-                onClose: () => router.push(`/scenarios?lang=${scenario.language}`),
+                onContinue: continueDrill,
+                onClose: leaveDrill,
+                saveAction: metrics.turnCount > 0 ? <SaveProgressAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} turnCount={metrics.turnCount} sessionKey={sessionKey} /> : undefined,
               }
               : {
                 state: 'success' as const,
@@ -673,10 +779,13 @@ export default function DrillPage() {
                 metrics: metrics,
                 proficiencyLevel,
                 startingLevel,
-                onClose: () => router.push(`/scenarios?lang=${scenario.language}`),
+                onClose: leaveDrill,
+                saveAction: metrics.turnCount > 0 ? <SaveProgressAction scenarioId={scenarioId} proficiencyLevel={proficiencyLevel} turnCount={metrics.turnCount} sessionKey={sessionKey} /> : undefined,
                 onTryAgain: () => {
                   clearSession(scenarioId);
-                  setMessages([]);
+                  setSessionKey(crypto.randomUUID());
+                  setStartedAt(Date.now());
+                  replaceMessages([]);
                   setEvaluation(null);
                   setEvaluationError(null);
                   setShowFeedback(false);

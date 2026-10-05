@@ -33,13 +33,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 🌟 Safely attach the language onto the scenario object
-    // This passes the data forward without using a 5th argument slot
-    const fallbackData = validationResult.data as Record<string, any>;
-    const dynamicScenario = {
-      ...scenario,
-      language: fallbackData.language || 'yoruba'
-    };
+    // The configured scenario decides the teaching language. A stale or
+    // tampered client value must not switch prompts into another language.
+    const dynamicScenario = scenario;
 
     // Defensive strip: the client already filters asides out of the history
     // it sends, but the route is the trust boundary that guarantees the

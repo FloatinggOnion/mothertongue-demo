@@ -1,7 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('@/services/gemini', () => ({
-  translateToEnglish: vi.fn(async () => 'translated'),
+  reviewPartnerReply: vi.fn(async () => ({
+    translation: 'translated', addressesLatestTurn: true,
+    staysInScene: true, inTargetLanguage: true, reason: '',
+  })),
   getPartnerResponse: vi.fn(async () => ({ reply: 'gemini reply', translation: 'gemini translation' })),
 }));
 
@@ -27,6 +30,7 @@ describe('buildAyaSystemPrompt', () => {
     expect(p).toContain(`You are ${scenario.aiRole}, in a roleplay for a Hausa language learner.`);
     expect(p).toContain(`Scene: ${scenario.description}.`);
     expect(p).toContain('"you" means the learner');
+    expect(p).toContain("Answer the learner's latest meaning");
     expect(p).toContain('Reply only in Hausa, in one short sentence');
   });
 });

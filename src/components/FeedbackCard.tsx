@@ -1,6 +1,7 @@
 'use client';
 
 import { Evaluation, ConversationMetrics, ProficiencyLevel } from '@/types';
+import type { ReactNode } from 'react';
 
 const LEVEL_LABELS: Record<ProficiencyLevel, string> = {
   beginner: 'Beginner',
@@ -17,19 +18,53 @@ type FeedbackCardProps =
       startingLevel?: ProficiencyLevel;
       onClose: () => void;
       onTryAgain: () => void;
+      saveAction?: ReactNode;
     }
   | {
       state: 'error';
       errorMessage: string;
       onRetry: () => void;
+      onContinue: () => void;
       onClose: () => void;
+      saveAction?: ReactNode;
+    }
+  | {
+      state: 'short';
+      onContinue: () => void;
+      onClose: () => void;
+      saveAction?: ReactNode;
     };
 
 export function FeedbackCard(props: FeedbackCardProps) {
   if (props.state === 'error') {
     return <ErrorState {...props} />;
   }
+  if (props.state === 'short') {
+    return <ShortSessionState {...props} />;
+  }
   return <SuccessState {...props} />;
+}
+
+function ShortSessionState({ onContinue, onClose, saveAction }: Extract<FeedbackCardProps, { state: 'short' }>) {
+  return (
+    <div className="fixed inset-0 bg-[#1A2744]/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+      <div className="bg-[#F5F0E8] rounded-lg max-w-lg w-full p-6 md:p-8 border border-[#D9D2C7] shadow-xl text-center">
+        <h2 className="font-display text-2xl text-[#2C1810] mb-3">A good start</h2>
+        <p className="font-body text-[#2C1810] text-sm leading-relaxed mb-8">
+          We need a little more conversation to give useful feedback. You can keep talking or finish without a score.
+        </p>
+        {saveAction && <div className="flex justify-center mb-5">{saveAction}</div>}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button onClick={onContinue} className="flex-1 py-3 px-4 rounded-sm bg-[#C4622D] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest">
+            Keep talking
+          </button>
+          <button onClick={onClose} className="flex-1 py-3 px-4 rounded-sm bg-[#2C1810] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest">
+            Finish for now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function SuccessState({
@@ -39,6 +74,7 @@ function SuccessState({
   startingLevel,
   onClose,
   onTryAgain,
+  saveAction,
 }: Extract<FeedbackCardProps, { state: 'success' }>) {
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
@@ -165,6 +201,7 @@ function SuccessState({
         </div>
 
         {/* Actions */}
+        {saveAction && <div className="flex justify-center mb-5">{saveAction}</div>}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={onTryAgain}
@@ -187,7 +224,9 @@ function SuccessState({
 function ErrorState({
   errorMessage,
   onRetry,
+  onContinue,
   onClose,
+  saveAction,
 }: Extract<FeedbackCardProps, { state: 'error' }>) {
   return (
     <div className="fixed inset-0 bg-[#1A2744]/70 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
@@ -205,12 +244,19 @@ function ErrorState({
           </p>
         </div>
 
+        {saveAction && <div className="flex justify-center mb-5">{saveAction}</div>}
         <div className="flex flex-col sm:flex-row gap-3">
           <button
             onClick={onRetry}
             className="flex-1 py-3 px-4 rounded-sm bg-[#E8955A] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest hover:bg-[#B7733B] transition-colors"
           >
             Retry evaluation
+          </button>
+          <button
+            onClick={onContinue}
+            className="flex-1 py-3 px-4 rounded-sm bg-[#C4622D] text-[#F5F0E8] font-ui text-xs uppercase tracking-widest"
+          >
+            Keep talking
           </button>
           <button
             onClick={onClose}

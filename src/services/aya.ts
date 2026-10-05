@@ -48,6 +48,7 @@ export function buildAyaSystemPrompt(scenario: any, level: ProficiencyLevel, lan
     `You are ${role}, in a roleplay for a ${lang} language learner.`,
     `Scene: ${scenario?.description || 'A conversation'}. ${context}`,
     `(In the scene text, "you" means the learner; you are ${role}.)`,
+    `Answer the learner's latest meaning and move this scene one step forward; do not restart with a greeting.`,
     `Stay in character as ${role}. Reply only in ${lang}, ${SENTENCE_HINT[level]}, and never speak for the learner.`,
   ].join('\n');
 }
